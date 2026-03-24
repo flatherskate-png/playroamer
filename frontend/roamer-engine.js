@@ -82,7 +82,6 @@ function startGame(r, source) {
   guessHistory     = [];
   lastFeedback     = {};
   cachedPinLayout = null;
-  pinListenersAttached = false;
   // Clear pin image cache for new route
   Object.keys(pinImageCache).forEach(k => delete pinImageCache[k]);
   if (leafletMap)  { leafletMap.remove(); leafletMap = null; }
@@ -1096,13 +1095,12 @@ function render() {
   });
 
   if (!revealed) {
-    if (!pinListenersAttached) {
-      const canvas = document.getElementById('route-canvas');
-      if (canvas) {
-        canvas.addEventListener('click', handleCanvasTap);
-        canvas.addEventListener('touchend', handleCanvasTap, { passive: false });
-        pinListenersAttached = true;
-      }
+    const canvas = document.getElementById('route-canvas');
+    if (canvas) {
+      canvas.removeEventListener('click', handleCanvasTap);
+      canvas.removeEventListener('touchend', handleCanvasTap);
+      canvas.addEventListener('click', handleCanvasTap);
+      canvas.addEventListener('touchend', handleCanvasTap, { passive: false });
     }
     if (geoT === 0 && !geoAnimating) {
       startGeoAnimation();
@@ -1219,4 +1217,3 @@ function handleCanvasTap(e) {
   if (hit !== null) tapPin(hit);
 }
 
-let pinListenersAttached = false;
