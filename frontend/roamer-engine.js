@@ -81,6 +81,9 @@ function startGame(r, source) {
   guessesRemaining = MAX_GUESSES;
   guessHistory     = [];
   lastFeedback     = {};
+  cachedPinLayout = null;
+  // Clear pin image cache for new route
+  Object.keys(pinImageCache).forEach(k => delete pinImageCache[k]);
   if (leafletMap)  { leafletMap.remove(); leafletMap = null; }
   screen = "play";
   isLandscape = checkLandscape();
@@ -228,15 +231,21 @@ let geoT           = 0;
 let geoRot         = 0;
 let geoAnimHandle  = null;
 let geoAnimating   = false;
-let cachedPinPositions = [];
+let lastDrawnPinPts  = []; // nudged pin positions for hit-testing
+let lastTruePts      = []; // true geo positions for hit-testing
+let lastPinR         = 30; // current filled pin radius
+let lastEmptyR       = 12; // current empty pin radius
+let cachedPinLayout  = null;    // { pts, pinR, emptyR, nudged }
+let cachedLayoutSize = null;    // { w, h } when layout was last computed
+const pinImageCache  = {};      // url -> loaded Image objects for canvas drawing
 
 function getRouteViewport(route) {
   const lats = route.slots.map(s => s.lat);
   const lngs = route.slots.map(s => s.lng);
   const routeSpanLat = Math.max(...lats) - Math.min(...lats) || 4;
   const routeSpanLng = Math.max(...lngs) - Math.min(...lngs) || 6;
-  const padLat = Math.max(5, routeSpanLat * 0.8);
-  const padLng = Math.max(8, routeSpanLng * 1.0);
+  const padLat = Math.max(2.5, routeSpanLat * 0.65);
+  const padLng = Math.max(2.5, routeSpanLng * 0.65);
   const centerLat = (Math.min(...lats) + Math.max(...lats)) / 2;
   const centerLng = (Math.min(...lngs) + Math.max(...lngs)) / 2;
   return { minLat: centerLat - padLat, maxLat: centerLat + padLat, minLng: centerLng - padLng, maxLng: centerLng + padLng, centerLat, centerLng };
@@ -270,58 +279,136 @@ function lerpProject(lat, lng, t, rotDeg, vp, W, H, cx, cy, R) {
   return { x: gp.x + (fp.x - gp.x) * t, y: gp.y + (fp.y - gp.y) * t, alpha: vis };
 }
 
-function computePinPositions(slots, vp, W, H) {
-  // True map positions (never move)
-  const truePts = slots.map(s => flatProject(s.lat, s.lng, vp, W, H));
-  // Displaced positions (start at true, get pushed outward)
-  const pts = truePts.map(p => ({ x: p.x, y: p.y }));
+function computePinLayout(route) {
+  const canvas = document.getElementById('route-canvas');
+  if (!canvas) return { pts: [], pinR: 20, emptyR: 10, nudged: [] };
+  const W = canvas.offsetWidth || 800;
+  const H = canvas.offsetHeight || 400;
+  const vp = getRouteViewport(route);
+  const N = route.slots.length;
 
-  const PIN_R = Math.max(20, Math.min(26, W / 26));
-  const MIN_DIST = PIN_R * 2 + 8;
-  const MARGIN = PIN_R + 4;
+  const MIN_PIN_R = 20;
+  const MAX_PIN_R = 55;
+  const EMPTY_RATIO = 0.42;
+  const MARGIN = 12;
 
-  // Centroid of all true positions — displacement radiates outward from here
-  const cx = truePts.reduce((s, p) => s + p.x, 0) / truePts.length;
-  const cy = truePts.reduce((s, p) => s + p.y, 0) / truePts.length;
+  // True geo positions (fixed)
+  const truePts = route.slots.map(s => {
+    const p = flatProject(s.lat, s.lng, vp, W, H);
+    return {
+      x: Math.max(MARGIN, Math.min(W - MARGIN, p.x)),
+      y: Math.max(MARGIN, Math.min(H - MARGIN, p.y))
+    };
+  });
 
-  // Iterative separation: push overlapping pins apart, biased outward from centroid
-  for (let pass = 0; pass < 30; pass++) {
-    let moved = false;
-    for (let i = 0; i < pts.length; i++) {
-      for (let j = i + 1; j < pts.length; j++) {
-        const dx = pts[j].x - pts[i].x;
-        const dy = pts[j].y - pts[i].y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        if (dist < MIN_DIST && dist > 0.01) {
-          const push = (MIN_DIST - dist) / 2 + 1;
-          const nx = dx / dist, ny = dy / dist;
-          // Pin farther from centroid gets pushed more
-          const di = Math.sqrt((pts[i].x - cx) ** 2 + (pts[i].y - cy) ** 2);
-          const dj = Math.sqrt((pts[j].x - cx) ** 2 + (pts[j].y - cy) ** 2);
-          const ratioI = di < dj ? 0.35 : 0.65;
-          const ratioJ = 1 - ratioI;
-          pts[i].x -= nx * push * ratioI;
-          pts[i].y -= ny * push * ratioI;
-          pts[j].x += nx * push * ratioJ;
-          pts[j].y += ny * push * ratioJ;
-          moved = true;
+  // Starting pin radius from canvas size
+  const canvasR = Math.min(W, H) / Math.max(5.5, N * 0.7);
+  let pinR = Math.max(MIN_PIN_R, Math.min(MAX_PIN_R, Math.round(canvasR)));
+
+  // Nudge function: given a radius, push overlapping pins apart
+  function nudgeAtRadius(r) {
+    const pts = truePts.map(p => ({ x: p.x, y: p.y }));
+    const spacing = r * 2 + 6;
+    for (let pass = 0; pass < 60; pass++) {
+      let moved = false;
+      for (let i = 0; i < N; i++) {
+        for (let j = i + 1; j < N; j++) {
+          const dx = pts[j].x - pts[i].x;
+          const dy = pts[j].y - pts[i].y;
+          const dist = Math.hypot(dx, dy);
+          if (dist < spacing) {
+            moved = true;
+            const overlap = spacing - dist + 2;
+            let pushX, pushY;
+            if (dist < 3) {
+              // Near-coincident: push perpendicular to route tangent
+              let rdx = 0, rdy = 0;
+              if (i > 0) { rdx += truePts[i].x - truePts[i-1].x; rdy += truePts[i].y - truePts[i-1].y; }
+              if (j < N - 1) { rdx += truePts[j+1].x - truePts[j].x; rdy += truePts[j+1].y - truePts[j].y; }
+              if (Math.hypot(rdx, rdy) < 1) { rdx = 1; rdy = 0; }
+              const rl = Math.hypot(rdx, rdy);
+              pushX = -rdy / rl; pushY = rdx / rl;
+            } else {
+              // 60% perpendicular-to-segment + 40% separation vector
+              const segDx = truePts[j].x - truePts[i].x;
+              const segDy = truePts[j].y - truePts[i].y;
+              const segLen = Math.hypot(segDx, segDy) || 1;
+              const perpX = -segDy / segLen;
+              const perpY = segDx / segLen;
+              const nx = dx / dist, ny = dy / dist;
+              pushX = perpX * 0.6 + nx * 0.4;
+              pushY = perpY * 0.6 + ny * 0.4;
+            }
+            const pLen = Math.hypot(pushX, pushY) || 1;
+            pushX /= pLen; pushY /= pLen;
+            // Split 35/65: earlier pin moves less
+            pts[i].x -= pushX * overlap * 0.35;
+            pts[i].y -= pushY * overlap * 0.35;
+            pts[j].x += pushX * overlap * 0.65;
+            pts[j].y += pushY * overlap * 0.65;
+          }
         }
       }
+      pts.forEach(p => {
+        p.x = Math.max(r + 2, Math.min(W - r - 2, p.x));
+        p.y = Math.max(r + 2, Math.min(H - r - 2, p.y));
+      });
+      if (!moved) break;
     }
-    // Clamp to canvas bounds with margin
-    for (const p of pts) {
-      p.x = Math.max(MARGIN, Math.min(W - MARGIN, p.x));
-      p.y = Math.max(MARGIN, Math.min(H - MARGIN, p.y));
-    }
-    if (!moved) break;
+    return pts;
   }
 
-  // Return both true and displaced positions
-  return pts.map((p, i) => ({
-    x: p.x, y: p.y,
-    trueX: truePts[i].x, trueY: truePts[i].y,
-    displaced: Math.sqrt((p.x - truePts[i].x) ** 2 + (p.y - truePts[i].y) ** 2) > 6,
-  }));
+  // Check if a layout is clean: no overlaps, all on-canvas
+  function layoutFits(pts, r) {
+    const spacing = r * 2 + 4;
+    const pad = r + 1;
+    for (let i = 0; i < N; i++) {
+      if (pts[i].x < pad || pts[i].x > W - pad || pts[i].y < pad || pts[i].y > H - pad) return false;
+      for (let j = i + 1; j < N; j++) {
+        if (Math.hypot(pts[j].x - pts[i].x, pts[j].y - pts[i].y) < spacing) return false;
+      }
+    }
+    return true;
+  }
+
+  // Nudge-shrink loop: try current radius, shrink if it doesn't fit
+  let nudged = nudgeAtRadius(pinR);
+  while (!layoutFits(nudged, pinR) && pinR > MIN_PIN_R) {
+    pinR = Math.max(MIN_PIN_R, pinR - 2);
+    nudged = nudgeAtRadius(pinR);
+  }
+
+  // Post-nudge: fix pins that landed on the route line
+  function ptSegDist(px, py, ax, ay, bx, by) {
+    const dx = bx - ax, dy = by - ay;
+    const len2 = dx*dx + dy*dy;
+    if (len2 < 1) return Math.hypot(px - ax, py - ay);
+    const t = Math.max(0, Math.min(1, ((px-ax)*dx + (py-ay)*dy) / len2));
+    return Math.hypot(px - (ax + t*dx), py - (ay + t*dy));
+  }
+
+  for (let i = 0; i < N; i++) {
+    const np = nudged[i], tp = truePts[i];
+    const offsetDist = Math.hypot(np.x - tp.x, np.y - tp.y);
+    if (offsetDist < 3) continue;
+
+    let tooClose = false;
+    for (let s = 0; s < N - 1; s++) {
+      if (s === i || s === i - 1) continue;
+      const d = ptSegDist(np.x, np.y, truePts[s].x, truePts[s].y, truePts[s+1].x, truePts[s+1].y);
+      if (d < pinR + 4) { tooClose = true; break; }
+    }
+
+    if (tooClose) {
+      const mx = tp.x - (np.x - tp.x);
+      const my = tp.y - (np.y - tp.y);
+      nudged[i].x = Math.max(pinR + 2, Math.min(W - pinR - 2, mx));
+      nudged[i].y = Math.max(pinR + 2, Math.min(H - pinR - 2, my));
+    }
+  }
+
+  const emptyR = Math.max(10, Math.round(pinR * EMPTY_RATIO));
+  return { pts: truePts, pinR, emptyR, nudged };
 }
 
 function drawGeoMap(t, rotDeg) {
@@ -419,140 +506,195 @@ function drawGeoMap(t, rotDeg) {
     }
   }
 
-  if (t > 0.85) {
-    const rA  = Math.min(1, (t - 0.85) / 0.15);
-    const pts = currentRoute.slots.map(s => flatProject(s.lat, s.lng, vp, W, H));
+  if (t > 0.80) {
+    const routeAlpha = Math.min(1, (t - 0.80) / 0.20);
+    const slots = currentRoute.slots;
+    const N = slots.length;
 
-    ctx.beginPath();
-    pts.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
-    ctx.strokeStyle = `rgba(125,211,252,${0.06 * rA})`; ctx.lineWidth = 14; ctx.lineCap = 'round'; ctx.stroke();
+    // Recompute pin layout if canvas resized or not yet computed
+    if (!cachedPinLayout || (cachedLayoutSize &&
+        (Math.abs(W - cachedLayoutSize.w) > 30 || Math.abs(H - cachedLayoutSize.h) > 30))) {
+      cachedPinLayout = computePinLayout(currentRoute);
+      cachedLayoutSize = { w: W, h: H };
+    }
+    const layout = cachedPinLayout;
+    const truePts = layout.pts;
+    const nudgedPts = layout.nudged;
+    const pinR = layout.pinR;
+    const emptyR = layout.emptyR;
 
+    // Update hit-test caches
+    lastDrawnPinPts = nudgedPts.map(p => ({ ...p }));
+    lastTruePts = truePts.map(p => ({ ...p }));
+    lastPinR = pinR;
+    lastEmptyR = emptyR;
+
+    // Route line
     ctx.beginPath();
-    pts.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
-    ctx.strokeStyle = `rgba(125,211,252,${0.45 * rA})`; ctx.lineWidth = 1.8; ctx.setLineDash([6, 5]); ctx.stroke();
+    truePts.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
+    ctx.strokeStyle = `rgba(125,211,252,${0.07 * routeAlpha})`;
+    ctx.lineWidth = 10; ctx.lineCap = 'round'; ctx.stroke();
+    ctx.beginPath();
+    truePts.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
+    ctx.strokeStyle = `rgba(125,211,252,${0.5 * routeAlpha})`;
+    ctx.lineWidth = 1.8; ctx.setLineDash([6, 5]); ctx.stroke();
     ctx.setLineDash([]);
 
-    cachedPinPositions = computePinPositions(currentRoute.slots, vp, W, H);
-
-    // Draw leader lines and true-location dots (V2 color-separated)
-    cachedPinPositions.forEach((pin) => {
-      if (!pin.displaced) return;
+    // Stems for nudged pins
+    slots.forEach((_, i) => {
+      const np = nudgedPts[i], tp = truePts[i];
+      const dx = tp.x - np.x, dy = tp.y - np.y;
+      const dist = Math.hypot(dx, dy);
+      if (dist < 4) return;
+      const isLocked = assignments[i] && slotIsLocked(i);
+      const isFilled = !!assignments[i];
+      const r = isFilled ? pinR : emptyR;
       ctx.beginPath();
-      ctx.moveTo(pin.trueX, pin.trueY);
-      ctx.lineTo(pin.x, pin.y);
-      ctx.strokeStyle = `rgba(200,190,175,${0.32 * rA})`;
-      ctx.lineWidth = 1.2;
-      ctx.setLineDash([3, 4]);
+      const nx = dx / dist, ny = dy / dist;
+      ctx.moveTo(np.x + nx * (r + 2), np.y + ny * (r + 2));
+      ctx.lineTo(tp.x, tp.y);
+      ctx.strokeStyle = isLocked
+        ? `rgba(74,222,128,${0.55 * routeAlpha})`
+        : `rgba(125,211,252,${0.35 * routeAlpha})`;
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([4, 3]);
       ctx.stroke();
       ctx.setLineDash([]);
-    });
-
-    // True-location dots: cyan, small, on the route
-    cachedPinPositions.forEach((pin) => {
-      if (!pin.displaced) return;
+      // Small dot at true position
       ctx.beginPath();
-      ctx.arc(pin.trueX, pin.trueY, 3.5, 0, Math.PI * 2);
-      ctx.fillStyle = `rgba(125,211,252,${0.7 * rA})`;
+      ctx.arc(tp.x, tp.y, 3, 0, Math.PI * 2);
+      ctx.fillStyle = isLocked
+        ? `rgba(74,222,128,${0.6 * routeAlpha})`
+        : `rgba(125,211,252,${0.5 * routeAlpha})`;
       ctx.fill();
-      ctx.strokeStyle = `rgba(125,211,252,${0.9 * rA})`;
-      ctx.lineWidth = 1;
-      ctx.stroke();
     });
-  }
-}
 
-function renderPinOverlay() {
-  const wrapper = document.getElementById('map-canvas-wrapper');
-  const canvas  = document.getElementById('route-canvas');
-  let overlay   = document.getElementById('pin-overlay');
-  if (!wrapper || !canvas) return;
+    // Pass 1: Filled pins in REVERSE order (earlier stops on top)
+    for (let i = N - 1; i >= 0; i--) {
+      if (!assignments[i]) continue;
+      const assigned = assignments[i];
+      const locked = assigned && slotIsLocked(i);
+      const isStart = i === 0;
+      const isEnd = i === N - 1;
+      const p = nudgedPts[i];
+      const r = pinR;
 
-  if (!overlay) {
-    overlay = document.createElement('div');
-    overlay.id = 'pin-overlay';
-    overlay.style.cssText = 'position:absolute;inset:0;pointer-events:none;';
-    wrapper.appendChild(overlay);
-  }
+      // Outer ring
+      ctx.beginPath(); ctx.arc(p.x, p.y, r + 2, 0, Math.PI * 2);
+      ctx.strokeStyle = locked
+        ? `rgba(74,222,128,${0.8 * routeAlpha})`
+        : `rgba(125,211,252,${0.7 * routeAlpha})`;
+      ctx.lineWidth = 2.5; ctx.stroke();
 
-  if (geoAnimating || geoT < 0.98) {
-    overlay.innerHTML = '';
-    return;
-  }
+      // Dark fill
+      ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(10,16,30,${0.95 * routeAlpha})`; ctx.fill();
 
-  const W = canvas.offsetWidth;
-  const H = canvas.offsetHeight;
-  if (!W || !H) return;
+      // Photo image
+      const url = assigned.photo;
+      if (!pinImageCache[url]) {
+        const img = new Image(); img.crossOrigin = 'anonymous';
+        img.onload = () => { pinImageCache[url] = img; redrawGeoMap(); };
+        img.onerror = () => { pinImageCache[url] = 'error'; };
+        img.src = url; pinImageCache[url] = 'loading';
+      }
+      const cachedImg = pinImageCache[url];
+      if (cachedImg && cachedImg !== 'loading' && cachedImg !== 'error') {
+        ctx.save();
+        ctx.beginPath(); ctx.arc(p.x, p.y, r - 1, 0, Math.PI * 2); ctx.clip();
+        const iw = cachedImg.naturalWidth, ih = cachedImg.naturalHeight;
+        const d = r * 2 - 2, scale = Math.max(d / iw, d / ih);
+        ctx.drawImage(cachedImg, p.x - iw*scale/2, p.y - ih*scale/2, iw*scale, ih*scale);
+        ctx.restore();
+      }
 
-  const vp   = getRouteViewport(currentRoute);
-  const pins = computePinPositions(currentRoute.slots, vp, W, H);
-  const PIN_R = Math.max(20, Math.min(26, W / 26));
+      // Locked overlay + checkmark
+      if (locked) {
+        ctx.save();
+        ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2); ctx.clip();
+        ctx.fillStyle = `rgba(0,0,0,${0.15 * routeAlpha})`; ctx.fill(); ctx.restore();
+        ctx.beginPath(); ctx.arc(p.x, p.y, Math.min(16, r * 0.45), 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(22,101,52,${0.9 * routeAlpha})`; ctx.fill();
+        ctx.strokeStyle = `rgba(74,222,128,${routeAlpha})`; ctx.lineWidth = 2;
+        ctx.beginPath(); const ck = Math.min(6, r * 0.2);
+        ctx.moveTo(p.x - ck, p.y); ctx.lineTo(p.x - ck*0.2, p.y + ck*0.7);
+        ctx.lineTo(p.x + ck, p.y - ck*0.6); ctx.stroke();
+      }
 
-  overlay.innerHTML = Array.from({length: currentRoute.stop_count}, (_, i) => {
-    const p       = pins[i];
-    const card    = assignments[i];
-    const locked  = slotIsLocked(i);
-    const isStart = i === 0;
-    const isEnd   = i === currentRoute.stop_count - 1;
+      // Number badge at bottom-right
+      const badgeR = Math.max(8, Math.round(r * 0.28));
+      const badgeX = p.x + r * 0.65, badgeY = p.y + r * 0.65;
+      ctx.beginPath(); ctx.arc(badgeX, badgeY, badgeR, 0, Math.PI * 2);
+      ctx.fillStyle = locked ? `rgba(16,48,24,${0.95*routeAlpha})` : `rgba(6,10,18,${0.92*routeAlpha})`; ctx.fill();
+      ctx.strokeStyle = locked ? `rgba(74,222,128,${0.6*routeAlpha})` : `rgba(125,211,252,${0.5*routeAlpha})`;
+      ctx.lineWidth = 1; ctx.stroke();
+      ctx.fillStyle = locked ? `rgba(74,222,128,${routeAlpha})` : `rgba(200,230,255,${0.9*routeAlpha})`;
+      ctx.font = `bold ${Math.round(badgeR * 1.1)}px 'DM Sans', sans-serif`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(String(i + 1), badgeX, badgeY);
 
-    // V2 color scheme: warm neutral default, cyan on interaction, green on lock
-    let borderCol, bgCol, labelContent;
-    if (locked) {
-      borderCol = '#4ade80'; bgCol = 'rgba(22,101,52,0.85)';
-      labelContent = `<span style="color:#4ade80;font-size:1rem;">✓</span>`;
-    } else if (card) {
-      // Photo placed — cyan to show it's active/map-relevant
-      borderCol = 'var(--cyan)'; bgCol = 'rgba(6,10,18,0.7)';
-      labelContent = `<img src="${card.photo}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;display:block;" />`;
-    } else if (selectedCard) {
-      // Awaiting placement — cyan pulse to invite tap
-      borderCol = 'rgba(125,211,252,0.8)'; bgCol = 'rgba(125,211,252,0.12)';
-      labelContent = `<span style="font-family:'Playfair Display',serif;font-size:0.95rem;font-weight:500;color:var(--cyan);">${i + 1}</span>`;
-    } else {
-      // Default resting state — warm neutral (UI scaffolding, not geography)
-      borderCol = isStart ? 'rgba(200,190,175,0.6)' : 'rgba(200,190,175,0.35)';
-      bgCol     = 'rgba(22,20,18,0.85)';
-      labelContent = `<span style="font-family:'Playfair Display',serif;font-size:0.9rem;font-weight:500;color:${isStart ? 'rgba(200,190,175,0.85)' : 'rgba(200,190,175,0.55)'};">${i + 1}</span>`;
+      // START/END labels
+      if (isStart || isEnd) {
+        ctx.fillStyle = isStart ? `rgba(125,211,252,${0.7*routeAlpha})` : `rgba(255,255,255,${0.3*routeAlpha})`;
+        ctx.font = `bold ${Math.max(8, Math.round(r * 0.3))}px 'DM Sans', sans-serif`;
+        ctx.textAlign = 'center'; ctx.fillText(isStart ? 'START' : 'END', p.x, p.y - r - 8);
+      }
     }
 
-    const pulseRing = (selectedCard && !card && !locked)
-      ? `<div style="position:absolute;inset:-6px;border-radius:50%;border:1.5px solid rgba(125,211,252,0.35);animation:pin-pulse 1.4s ease-in-out infinite;pointer-events:none;"></div>`
-      : '';
+    // Pass 2: Empty pins in forward order (always on top)
+    for (let i = 0; i < N; i++) {
+      if (assignments[i]) continue;
+      const isSelected = selectedCard !== null;
+      const isStart = i === 0;
+      const isEnd = i === N - 1;
+      const p = nudgedPts[i];
+      const r = emptyR;
 
-    const startEndLabel = isStart
-      ? `<div style="position:absolute;top:${-PIN_R - 14}px;left:50%;transform:translateX(-50%);font-size:9px;font-weight:700;letter-spacing:0.1em;font-family:'DM Sans',sans-serif;color:rgba(125,211,252,0.65);white-space:nowrap;pointer-events:none;">START</div>`
-      : isEnd
-        ? `<div style="position:absolute;top:${-PIN_R - 14}px;left:50%;transform:translateX(-50%);font-size:9px;font-weight:700;letter-spacing:0.1em;font-family:'DM Sans',sans-serif;color:rgba(255,255,255,0.25);white-space:nowrap;pointer-events:none;">END</div>`
-        : '';
+      // Glow when a photo is selected
+      if (isSelected) {
+        const glow = ctx.createRadialGradient(p.x, p.y, r*0.5, p.x, p.y, r+8);
+        glow.addColorStop(0, `rgba(125,211,252,${0.25*routeAlpha})`);
+        glow.addColorStop(1, 'rgba(125,211,252,0)');
+        ctx.beginPath(); ctx.arc(p.x, p.y, r+8, 0, Math.PI*2); ctx.fillStyle = glow; ctx.fill();
+      }
 
-    const cursor = locked ? 'default' : 'pointer';
+      // START gets extra ring
+      if (isStart) {
+        ctx.beginPath(); ctx.arc(p.x, p.y, r+5, 0, Math.PI*2);
+        ctx.strokeStyle = `rgba(125,211,252,${0.15*routeAlpha})`; ctx.lineWidth = 1; ctx.stroke();
+      }
 
-    return `<div class="map-pin" data-slot="${i}"
-      style="position:absolute;left:${p.x}px;top:${p.y}px;
-             width:${PIN_R * 2}px;height:${PIN_R * 2}px;
-             transform:translate(-50%,-50%);pointer-events:auto;cursor:${cursor};">
-      ${pulseRing}
-      ${startEndLabel}
-      <div style="width:100%;height:100%;border-radius:50%;background:${bgCol};
-                  border:2px solid ${borderCol};display:flex;align-items:center;justify-content:center;
-                  overflow:hidden;position:relative;
-                  box-shadow:${selectedCard && !card && !locked ? '0 0 12px rgba(125,211,252,0.3)' : '0 2px 8px rgba(0,0,0,0.5)'};
-                  transition:box-shadow 0.15s,border-color 0.15s;">
-        ${labelContent}
-      </div>
-    </div>`;
-  }).join('');
+      // Fill
+      ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI*2);
+      ctx.fillStyle = isStart ? `rgba(10,30,50,${0.85*routeAlpha})` : `rgba(10,16,30,${0.78*routeAlpha})`; ctx.fill();
 
-  overlay.querySelectorAll('.map-pin').forEach(el => {
-    el.addEventListener('click', () => tapPin(parseInt(el.dataset.slot)));
-    el.addEventListener('touchend', e => { e.preventDefault(); tapPin(parseInt(el.dataset.slot)); }, { passive: false });
-  });
+      // Border
+      ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI*2);
+      if (isSelected) { ctx.strokeStyle = `rgba(125,211,252,${0.8*routeAlpha})`; ctx.lineWidth = 2; }
+      else if (isStart) { ctx.strokeStyle = `rgba(125,211,252,${0.7*routeAlpha})`; ctx.lineWidth = 2; }
+      else { ctx.strokeStyle = `rgba(255,255,255,${0.28*routeAlpha})`; ctx.lineWidth = 1.5; ctx.setLineDash([3,2]); }
+      ctx.stroke(); ctx.setLineDash([]);
+
+      // Number text
+      ctx.fillStyle = isStart ? `rgba(125,211,252,${0.95*routeAlpha})` : `rgba(220,230,245,${0.82*routeAlpha})`;
+      ctx.font = `bold ${Math.round(r * 0.78)}px 'DM Sans', sans-serif`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(String(i + 1), p.x, p.y);
+
+      // START/END labels
+      if (isStart || isEnd) {
+        ctx.fillStyle = isStart ? `rgba(125,211,252,${0.7*routeAlpha})` : `rgba(255,255,255,${0.3*routeAlpha})`;
+        ctx.font = `bold ${Math.max(8, Math.round(r * 0.5))}px 'DM Sans', sans-serif`;
+        ctx.fillText(isStart ? 'START' : 'END', p.x, p.y - r - 8);
+      }
+    }
+  }
 }
 
 function startGeoAnimation() {
   if (geoAnimHandle) cancelAnimationFrame(geoAnimHandle);
   geoAnimating = true;
   geoT = 0;
-  cachedPinPositions = [];
   const vp = getRouteViewport(currentRoute);
   geoRot = -vp.centerLng;
   const SPIN_DURATION = 800, ZOOM_DURATION = 1400, TOTAL = SPIN_DURATION + ZOOM_DURATION;
@@ -575,7 +717,6 @@ function startGeoAnimation() {
     } else {
       geoT = 1; geoAnimating = false;
       drawGeoMap(1, 0);
-      renderPinOverlay();
     }
   }
   geoAnimHandle = requestAnimationFrame(frame);
@@ -589,7 +730,6 @@ function stopGeoAnimation() {
 function redrawGeoMap() {
   if (geoAnimating) return;
   drawGeoMap(1, 0);
-  renderPinOverlay();
 }
 
 function routeMiniSVG(r) {
@@ -1038,3 +1178,57 @@ async function fetchRoutes() {
 }
 
 fetchRoutes();
+
+
+/* ═══════════════════════════════════════════════════════
+   CANVAS PIN HIT-TESTING
+   ═══════════════════════════════════════════════════════ */
+(function() {
+  const app = document.getElementById('app');
+  if (!app) return;
+
+  function handleCanvasTap(e) {
+    const canvas = document.getElementById('route-canvas');
+    if (!canvas || !currentRoute || revealed) return;
+    const rect = canvas.getBoundingClientRect();
+    const clientX = e.clientX !== undefined ? e.clientX : (e.changedTouches && e.changedTouches[0].clientX);
+    const clientY = e.clientY !== undefined ? e.clientY : (e.changedTouches && e.changedTouches[0].clientY);
+    if (clientX === undefined) return;
+    const x = clientX - rect.left;
+    const y = clientY - rect.top;
+    if (!lastDrawnPinPts.length) return;
+
+    let hit = null, hitDist = Infinity;
+    const emptyHitR = (lastEmptyR || 12) + 8;
+    const filledHitR = (lastPinR || 30) + 6;
+
+    // Empty pins first
+    lastDrawnPinPts.forEach((p, i) => {
+      if (assignments[i]) return;
+      const d = Math.sqrt((x-p.x)**2 + (y-p.y)**2);
+      if (d < emptyHitR && d < hitDist) { hit = i; hitDist = d; }
+    });
+    // Placed pins (can override empty hits if closer)
+    lastDrawnPinPts.forEach((p, i) => {
+      if (!assignments[i]) return;
+      const d = Math.sqrt((x-p.x)**2 + (y-p.y)**2);
+      if (d < filledHitR && d < hitDist) { hit = i; hitDist = d; }
+    });
+
+    if (hit !== null) tapPin(hit);
+  }
+
+  app.addEventListener('click', handleCanvasTap);
+  app.addEventListener('touchend', e => {
+    const canvas = document.getElementById('route-canvas');
+    if (!canvas) return;
+    const t = e.changedTouches && e.changedTouches[0];
+    if (!t) return;
+    const rect = canvas.getBoundingClientRect();
+    const pad = 20;
+    if (t.clientX < rect.left - pad || t.clientX > rect.right + pad ||
+        t.clientY < rect.top - pad  || t.clientY > rect.bottom + pad) return;
+    e.preventDefault();
+    handleCanvasTap(e);
+  }, { passive: false });
+})();

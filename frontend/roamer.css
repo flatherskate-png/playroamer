@@ -649,20 +649,6 @@ body {
   line-height: 0;
 }
 
-#pin-overlay {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  border-radius: 10px;
-  overflow: hidden;
-}
-
-.map-pin {
-  position: absolute;
-  -webkit-tap-highlight-color: transparent;
-  touch-action: manipulation;
-}
-
 @keyframes pin-pulse {
   0%, 100% { opacity: 1;   transform: scale(1); }
   50%       { opacity: 0.5; transform: scale(1.15); }
