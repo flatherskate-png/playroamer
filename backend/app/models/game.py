@@ -17,6 +17,8 @@ class Decoy(BaseModel):
 class Route(BaseModel):
     id: str
     name: str
+    region: str = ""
+    pack: str = ""
     stops: List[Location]
     decoys: List[Decoy]
 
@@ -27,11 +29,33 @@ class HiddenLocation(BaseModel):
     photo: str
 
 
+class SlotLocation(BaseModel):
+    """Geographic position of a route slot — no name, no photo."""
+    lat: float
+    lng: float
+
+
 class RoutePublic(BaseModel):
-    """Route data safe to send to the client — no lat/lng, no order, no decoy flag."""
+    """Route data safe to send to the client during gameplay.
+
+    Photos are shuffled (stops + decoys mixed) with no lat/lng.
+    Slots expose the ordered pin positions so the geo map can render,
+    but without revealing which photo belongs in each slot.
+    """
     id: str
     name: str
+    region: str
+    pack: str
+    stop_count: int
+    decoy_count: int
+    slots: List[SlotLocation]
     photos: List[HiddenLocation]
+
+
+class RouteReveal(BaseModel):
+    """Full solution data — only sent after game ends."""
+    stops: List[Location]
+    decoy_names: List[str]
 
 
 class GuessItem(BaseModel):

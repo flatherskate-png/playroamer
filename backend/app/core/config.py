@@ -15,5 +15,11 @@ class Settings(BaseSettings):
     daily_route_index: int = 0
     routes_csv: Path = _BACKEND_DIR / "data" / "routes.csv"
 
+    @property
+    def cors_origins(self) -> List[str]:
+        if self.environment == "development":
+            return ["*"]
+        return self.allowed_origins
+
 
 settings = Settings()

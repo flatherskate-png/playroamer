@@ -1,6 +1,6 @@
 import random
 from app.models.game import (
-    Route, RoutePublic, HiddenLocation,
+    Route, RoutePublic, RouteReveal, HiddenLocation, SlotLocation,
     GuessRequest, GuessResponse, SlotFeedback,
 )
 from app.services.route_store import get_route_by_id
@@ -11,7 +11,8 @@ MAX_GUESSES = 3
 def get_public_route(route: Route) -> RoutePublic:
     """
     Return only what the client needs to render the puzzle.
-    No lat/lng, no order, no decoy flag.
+    Photos are shuffled (stops + decoys mixed) with no lat/lng.
+    Slots expose ordered pin positions without revealing which photo goes where.
     """
     all_photos: list[HiddenLocation] = [
         HiddenLocation(name=s.name, photo=s.photo) for s in route.stops
@@ -19,7 +20,24 @@ def get_public_route(route: Route) -> RoutePublic:
         HiddenLocation(name=d.name, photo=d.photo) for d in route.decoys
     ]
     random.shuffle(all_photos)
-    return RoutePublic(id=route.id, name=route.name, photos=all_photos)
+    return RoutePublic(
+        id=route.id,
+        name=route.name,
+        region=route.region,
+        pack=route.pack,
+        stop_count=len(route.stops),
+        decoy_count=len(route.decoys),
+        slots=[SlotLocation(lat=s.lat, lng=s.lng) for s in route.stops],
+        photos=all_photos,
+    )
+
+
+def get_reveal(route: Route) -> RouteReveal:
+    """Return full solution data — only call after the game has ended."""
+    return RouteReveal(
+        stops=route.stops,
+        decoy_names=[d.name for d in route.decoys],
+    )
 
 
 def validate_guess(request: GuessRequest, guess_number: int) -> GuessResponse:

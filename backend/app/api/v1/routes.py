@@ -1,8 +1,8 @@
 from fastapi import APIRouter, HTTPException, Query
 
-from app.models.game import RoutePublic, GuessRequest, GuessResponse
+from app.models.game import RoutePublic, RouteReveal, GuessRequest, GuessResponse
 from app.services.route_store import get_route_by_id, get_daily_route, get_all_routes
-from app.services.game_service import get_public_route, validate_guess
+from app.services.game_service import get_public_route, get_reveal, validate_guess
 
 router = APIRouter()
 
@@ -27,6 +27,15 @@ async def get_route(route_id: str):
     if not route:
         raise HTTPException(status_code=404, detail="Route not found")
     return get_public_route(route)
+
+
+@router.get("/routes/{route_id}/reveal", response_model=RouteReveal)
+async def reveal_route(route_id: str):
+    """Return full solution data — call only after the game has ended."""
+    route = get_route_by_id(route_id)
+    if not route:
+        raise HTTPException(status_code=404, detail="Route not found")
+    return get_reveal(route)
 
 
 @router.post("/routes/{route_id}/guess", response_model=GuessResponse)

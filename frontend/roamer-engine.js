@@ -1,8 +1,17 @@
 /* ═══════════════════════════════════════════════════════
    ROAMER — Game engine
    Interaction model: tap photo → tap pin to place
-   Depends on: roamer-data.js (ROUTES, DAILY_INDEX)
+   Routes are fetched from the backend API at startup.
    ═══════════════════════════════════════════════════════ */
+
+// ── API ──
+const API_BASE = 'http://localhost:8000';
+
+// ── Remote state ──
+let dailyRoute   = null;   // RoutePublic from /routes/daily
+let allRoutes    = [];     // RoutePublic[] from /routes
+let routesLoaded = false;
+let revealData   = null;   // RouteReveal from /routes/{id}/reveal (post-game)
 
 // ── State ──
 let screen       = "home";
@@ -61,13 +70,13 @@ function shuffle(arr) {
 function startGame(r, source) {
   currentRoute     = r;
   playSource       = source || "home";
-  cards = shuffle([
-    ...r.stops.map(s  => ({ ...s,  isDecoy: false })),
-    ...r.decoys.map(d => ({ ...d,  isDecoy: true, lat: 0, lng: 0 })),
-  ]);
+  // r.photos is already shuffled by the server (stops + decoys mixed, no lat/lng).
+  // Reshuffle client-side so retries get a fresh order.
+  cards            = shuffle([...r.photos]);
   assignments      = {};
   selectedCard     = null;
   revealed         = false;
+  revealData       = null;
   score            = null;
   guessesRemaining = MAX_GUESSES;
   guessHistory     = [];
@@ -125,53 +134,72 @@ function tapPin(slotIndex) {
 }
 
 function allSlotsFilled() {
-  return currentRoute.stops.every((_, i) => assignments[i]);
+  return Array.from({length: currentRoute.stop_count}, (_, i) => i).every(i => assignments[i]);
 }
 
-function checkAnswers() {
-  const feedback = {};
-  let correct = 0;
-  currentRoute.stops.forEach((stop, i) => {
-    const placed = assignments[i];
-    if (!placed) return;
-    if (placed.name === stop.name)  { feedback[i] = "green";  correct++; }
-    else if (!placed.isDecoy)        { feedback[i] = "yellow"; }
-    else                             { feedback[i] = "red"; }
-  });
-  lastFeedback = feedback;
-  guessHistory.push({ assignments: { ...assignments }, feedback: { ...feedback } });
-  guessesRemaining--;
+async function checkAnswers() {
+  const guessNumber = guessHistory.length + 1;
+  const assignmentsList = Object.entries(assignments).map(([slot, card]) => ({
+    slot_index: parseInt(slot),
+    photo_name: card.name,
+  }));
 
-  const won  = correct === currentRoute.stops.length;
-  const lost = guessesRemaining === 0;
+  const btn = document.getElementById('btn-submit');
+  if (btn) btn.disabled = true;
 
-  if (won || lost) {
-    score = correct;
-    revealed = true;
-    history.push({ route: currentRoute.name, score: correct, total: currentRoute.stops.length });
-    render();
-    setTimeout(initLeafletMap, 50);
-  } else {
-    const newAssignments = {};
-    currentRoute.stops.forEach((_, i) => {
-      if (feedback[i] === "green") newAssignments[i] = assignments[i];
-    });
-    assignments  = newAssignments;
-    selectedCard = null;
-    render();
-    redrawGeoMap();
+  try {
+    const response = await fetch(
+      `${API_BASE}/api/v1/routes/${currentRoute.id}/guess?guess_number=${guessNumber}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ route_id: currentRoute.id, assignments: assignmentsList }),
+      }
+    );
+    if (!response.ok) throw new Error(`Guess failed: ${response.status}`);
+    const result = await response.json();
+
+    const feedback = {};
+    result.feedback.forEach(f => { feedback[f.slot_index] = f.result; });
+    lastFeedback = feedback;
+    guessHistory.push({ assignments: { ...assignments }, feedback: { ...feedback } });
+    guessesRemaining = result.guesses_remaining;
+
+    if (result.solved || result.guesses_remaining === 0) {
+      const revealResp = await fetch(`${API_BASE}/api/v1/routes/${currentRoute.id}/reveal`);
+      revealData = await revealResp.json();
+      score = result.correct_count;
+      revealed = true;
+      history.push({ route: currentRoute.name, score: result.correct_count, total: result.total_stops });
+      render();
+      setTimeout(initLeafletMap, 50);
+    } else {
+      const newAssignments = {};
+      Array.from({length: currentRoute.stop_count}, (_, i) => i).forEach(i => {
+        if (feedback[i] === "green") newAssignments[i] = assignments[i];
+      });
+      assignments  = newAssignments;
+      selectedCard = null;
+      render();
+      redrawGeoMap();
+    }
+  } catch (err) {
+    console.error('Failed to submit guess:', err);
+    if (btn) btn.disabled = false;
   }
 }
 
 function initLeafletMap() {
+  if (!revealData) return;
   const el = document.getElementById("leaflet-map");
   if (!el || !window.L) return;
+  const stops = revealData.stops;
   const map = L.map(el, { zoomControl: true, scrollWheelZoom: false, doubleClickZoom: false, touchZoom: true });
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 18 }).addTo(map);
-  const bounds = L.latLngBounds(currentRoute.stops.map(s => [s.lat, s.lng]));
+  const bounds = L.latLngBounds(stops.map(s => [s.lat, s.lng]));
   map.fitBounds(bounds.pad(0.25));
-  L.polyline(currentRoute.stops.map(s => [s.lat, s.lng]), { color: "rgba(125,211,252,0.7)", weight: 3, dashArray: "8 5" }).addTo(map);
-  currentRoute.stops.forEach((stop, i) => {
+  L.polyline(stops.map(s => [s.lat, s.lng]), { color: "rgba(125,211,252,0.7)", weight: 3, dashArray: "8 5" }).addTo(map);
+  stops.forEach((stop, i) => {
     const correct = assignments[i]?.name === stop.name;
     const col = correct ? "#4ade80" : "#f87171";
     const bg  = correct ? "rgba(22,101,52,0.85)" : "rgba(127,29,29,0.85)";
@@ -203,8 +231,8 @@ let geoAnimating   = false;
 let cachedPinPositions = [];
 
 function getRouteViewport(route) {
-  const lats = route.stops.map(s => s.lat);
-  const lngs = route.stops.map(s => s.lng);
+  const lats = route.slots.map(s => s.lat);
+  const lngs = route.slots.map(s => s.lng);
   const routeSpanLat = Math.max(...lats) - Math.min(...lats) || 4;
   const routeSpanLng = Math.max(...lngs) - Math.min(...lngs) || 6;
   const padLat = Math.max(5, routeSpanLat * 0.8);
@@ -242,9 +270,9 @@ function lerpProject(lat, lng, t, rotDeg, vp, W, H, cx, cy, R) {
   return { x: gp.x + (fp.x - gp.x) * t, y: gp.y + (fp.y - gp.y) * t, alpha: vis };
 }
 
-function computePinPositions(stops, vp, W, H) {
+function computePinPositions(slots, vp, W, H) {
   // True map positions (never move)
-  const truePts = stops.map(s => flatProject(s.lat, s.lng, vp, W, H));
+  const truePts = slots.map(s => flatProject(s.lat, s.lng, vp, W, H));
   // Displaced positions (start at true, get pushed outward)
   const pts = truePts.map(p => ({ x: p.x, y: p.y }));
 
@@ -393,7 +421,7 @@ function drawGeoMap(t, rotDeg) {
 
   if (t > 0.85) {
     const rA  = Math.min(1, (t - 0.85) / 0.15);
-    const pts = currentRoute.stops.map(s => flatProject(s.lat, s.lng, vp, W, H));
+    const pts = currentRoute.slots.map(s => flatProject(s.lat, s.lng, vp, W, H));
 
     ctx.beginPath();
     pts.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
@@ -404,23 +432,11 @@ function drawGeoMap(t, rotDeg) {
     ctx.strokeStyle = `rgba(125,211,252,${0.45 * rA})`; ctx.lineWidth = 1.8; ctx.setLineDash([6, 5]); ctx.stroke();
     ctx.setLineDash([]);
 
-    ctx.font = `10px 'DM Sans', sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillStyle = `rgba(125,211,252,${0.3 * rA})`;
-    currentRoute.travelTimes.forEach((tt, i) => {
-      if (i >= pts.length - 1) return;
-      const mx = (pts[i].x + pts[i+1].x) / 2;
-      const my = (pts[i].y + pts[i+1].y) / 2;
-      const dx = pts[i+1].x - pts[i].x, dy = pts[i+1].y - pts[i].y;
-      const len = Math.sqrt(dx*dx + dy*dy) || 1;
-      ctx.fillText(tt, mx + (-dy/len*14), my + (dx/len*14));
-    });
-
-    cachedPinPositions = computePinPositions(currentRoute.stops, vp, W, H);
+    cachedPinPositions = computePinPositions(currentRoute.slots, vp, W, H);
 
     // Draw leader lines and true-location dots (V2 color-separated)
-    cachedPinPositions.forEach((pin, i) => {
+    cachedPinPositions.forEach((pin) => {
       if (!pin.displaced) return;
-      // Leader line: warm neutral, thicker for visibility
       ctx.beginPath();
       ctx.moveTo(pin.trueX, pin.trueY);
       ctx.lineTo(pin.x, pin.y);
@@ -432,7 +448,7 @@ function drawGeoMap(t, rotDeg) {
     });
 
     // True-location dots: cyan, small, on the route
-    cachedPinPositions.forEach((pin, i) => {
+    cachedPinPositions.forEach((pin) => {
       if (!pin.displaced) return;
       ctx.beginPath();
       ctx.arc(pin.trueX, pin.trueY, 3.5, 0, Math.PI * 2);
@@ -468,15 +484,15 @@ function renderPinOverlay() {
   if (!W || !H) return;
 
   const vp   = getRouteViewport(currentRoute);
-  const pins = computePinPositions(currentRoute.stops, vp, W, H);
+  const pins = computePinPositions(currentRoute.slots, vp, W, H);
   const PIN_R = Math.max(20, Math.min(26, W / 26));
 
-  overlay.innerHTML = currentRoute.stops.map((stop, i) => {
+  overlay.innerHTML = Array.from({length: currentRoute.stop_count}, (_, i) => {
     const p       = pins[i];
     const card    = assignments[i];
     const locked  = slotIsLocked(i);
     const isStart = i === 0;
-    const isEnd   = i === currentRoute.stops.length - 1;
+    const isEnd   = i === currentRoute.stop_count - 1;
 
     // V2 color scheme: warm neutral default, cyan on interaction, green on lock
     let borderCol, bgCol, labelContent;
@@ -577,12 +593,12 @@ function redrawGeoMap() {
 }
 
 function routeMiniSVG(r) {
-  const lats=r.stops.map(s=>s.lat), lngs=r.stops.map(s=>s.lng);
+  const lats=r.slots.map(s=>s.lat), lngs=r.slots.map(s=>s.lng);
   const minLat=Math.min(...lats), maxLat=Math.max(...lats), minLng=Math.min(...lngs), maxLng=Math.max(...lngs);
   const cosLat=Math.cos(((minLat+maxLat)/2*Math.PI)/180);
   const sc=Math.min(52/((maxLng-minLng||1)*cosLat),34/(maxLat-minLat||1));
   const cx2=(minLng+maxLng)/2, cy2=(minLat+maxLat)/2;
-  const pts=r.stops.map(s=>({x:36+(s.lng-cx2)*cosLat*sc, y:24-(s.lat-cy2)*sc}));
+  const pts=r.slots.map(s=>({x:36+(s.lng-cx2)*cosLat*sc, y:24-(s.lat-cy2)*sc}));
   const d=pts.map((p,j)=>`${j===0?"M":"L"}${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(" ");
   return `<svg width="72" height="48" viewBox="0 0 72 48" style="flex-shrink:0">
     <path d="${d}" fill="none" stroke="rgba(125,211,252,0.4)" stroke-width="1.8" stroke-linecap="round" stroke-dasharray="4 3"/>
@@ -595,14 +611,14 @@ function frozenRowHTML(gh, guessNum) {
   const FB_BD = {green:"#4ade80",yellow:"#facc15",red:"#f87171"};
   const FB_IC = {green:"✓",yellow:"↕",red:"✗"};
   const correct = Object.values(gh.feedback).filter(f => f === "green").length;
-  const scoreCol = correct === currentRoute.stops.length ? "#4ade80" : "#7dd3fc";
+  const scoreCol = correct === currentRoute.stop_count ? "#4ade80" : "#7dd3fc";
   return `<div class="frozen-row">
     <div class="frozen-label">
       <span style="font-size:0.58rem;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-3);">G${guessNum}</span>
-      <span style="font-size:0.72rem;font-weight:500;color:${scoreCol};">${correct}/${currentRoute.stops.length}</span>
+      <span style="font-size:0.72rem;font-weight:500;color:${scoreCol};">${correct}/${currentRoute.stop_count}</span>
     </div>
     <div class="frozen-thumbs">
-      ${currentRoute.stops.map((_,i) => {
+      ${Array.from({length: currentRoute.stop_count}, (_, i) => {
         const card = gh.assignments[i], fb = gh.feedback[i];
         const bd = fb ? FB_BD[fb] : "rgba(255,255,255,0.1)";
         const bg = fb ? FB_BG[fb] : "rgba(255,255,255,0.03)";
@@ -632,14 +648,14 @@ function render() {
       if (i < guessHistory.length) {
         const gh = guessHistory[i];
         const c  = Object.values(gh.feedback).filter(f=>f==="green").length;
-        cls += c === currentRoute.stops.length ? " correct" : " used";
+        cls += c === currentRoute.stop_count ? " correct" : " used";
       }
       return `<div class="${cls}"></div>`;
     }).join("")}</div>`;
     navRight.innerHTML = `
       <div class="nav-play-meta">
         <span class="nav-play-title">${currentRoute.name}</span>
-        <span class="nav-play-sub">${currentRoute.region} · ${currentRoute.stops.length} stops · ${currentRoute.decoys.length} decoys</span>
+        <span class="nav-play-sub">${currentRoute.region} · ${currentRoute.stop_count} stops · ${currentRoute.decoy_count} decoys</span>
       </div>
       ${pipsHTML}
       <button class="btn-ghost" id="nav-back">← Back</button>
@@ -662,8 +678,12 @@ function render() {
 
   // ── HOME ──
   if (screen === "home") {
-    const daily = ROUTES[DAILY_INDEX];
-    const core  = ROUTES.filter((_,i) => i !== DAILY_INDEX);
+    if (!routesLoaded) {
+      app.innerHTML = `<div style="text-align:center;padding:80px 24px;color:var(--text-2);">Loading routes…</div>`;
+      return;
+    }
+    const daily = dailyRoute;
+    const core  = allRoutes.filter(r => r.id !== daily.id);
     let scoresHTML = "";
     if (history.length > 0) {
       scoresHTML = `<div class="scores-panel" style="margin:36px auto 0;">
@@ -682,7 +702,7 @@ function render() {
         <div style="display:flex;align-items:flex-start;gap:20px;flex-wrap:wrap;">
           <div style="flex:1;min-width:180px;">
             <div class="daily-route-name">${daily.name}</div>
-            <div class="daily-meta">${daily.region} · ${daily.stops.length} stops · ${daily.decoys.length} decoys · 3 guesses</div>
+            <div class="daily-meta">${daily.region} · ${daily.stop_count} stops · ${daily.decoy_count} decoys · 3 guesses</div>
             <div class="daily-actions">
               <button class="btn-play" id="btn-daily-play">Start Today's Route →</button>
             </div>
@@ -692,22 +712,20 @@ function render() {
       </div>
       <div class="section-label">Winter 2024</div>
       <div class="route-grid">
-        ${core.map(r => {
-          const ri = ROUTES.indexOf(r);
-          return `<button class="route-btn" data-route="${ri}">${routeMiniSVG(r)}<div><div class="rname">${r.name}</div><div class="rmeta">${r.region} · ${r.stops.length} stops</div></div></button>`;
-        }).join("")}
+        ${core.map(r => `<button class="route-btn" data-route="${r.id}">${routeMiniSVG(r)}<div><div class="rname">${r.name}</div><div class="rmeta">${r.region} · ${r.stop_count} stops</div></div></button>`).join("")}
       </div>
       ${scoresHTML}`;
     document.getElementById("btn-daily-play").addEventListener("click", () => startGame(daily, "home"));
     document.querySelectorAll(".route-btn").forEach(btn => {
-      btn.addEventListener("click", () => startGame(ROUTES[parseInt(btn.dataset.route)], "home"));
+      const r = allRoutes.find(r => r.id === btn.dataset.route);
+      if (r) btn.addEventListener("click", () => startGame(r, "home"));
     });
     return;
   }
 
   // ── GRAND ADVENTURES ──
   if (screen === "core") {
-    const grandRoutes = ROUTES.filter(r => r.pack === 'grand');
+    const grandRoutes = allRoutes.filter(r => r.pack === 'grand');
     let grandBody;
     if (grandRoutes.length === 0) {
       grandBody = '<div style="margin-top:48px;text-align:center;padding:48px 24px;border:1px solid rgba(255,255,255,0.07);border-radius:18px;background:rgba(255,255,255,0.025);">'
@@ -717,10 +735,9 @@ function render() {
         + '</div>';
     } else {
       grandBody = '<div class="section-label">Grand Adventures</div><div class="route-grid">'
-        + grandRoutes.map(r => {
-            const ri = ROUTES.indexOf(r);
-            return `<button class="route-btn" data-route="${ri}">${routeMiniSVG(r)}<div><div class="rname">${r.name}</div><div class="rmeta">${r.region} · ${r.stops.length} stops · ${r.decoys.length} decoys</div></div></button>`;
-          }).join('') + '</div>';
+        + grandRoutes.map(r =>
+            `<button class="route-btn" data-route="${r.id}">${routeMiniSVG(r)}<div><div class="rname">${r.name}</div><div class="rmeta">${r.region} · ${r.stop_count} stops · ${r.decoy_count} decoys</div></div></button>`
+          ).join('') + '</div>';
     }
     app.innerHTML = '<div style="margin-bottom:28px;">'
       + '<div class="home-eyebrow" style="text-align:left;margin-bottom:10px;">Pack</div>'
@@ -728,13 +745,15 @@ function render() {
       + '<p style="font-size:0.85rem;color:var(--text-2);font-weight:300;margin-top:6px;">To get your bearings, a collection of globe-spanning adventures built around the world\'s most recognizable places.</p>'
       + '</div>' + grandBody;
     document.querySelectorAll(".route-btn").forEach(btn => {
-      btn.addEventListener("click", () => startGame(ROUTES[parseInt(btn.dataset.route)], "core"));
+      const r = allRoutes.find(r => r.id === btn.dataset.route);
+      if (r) btn.addEventListener("click", () => startGame(r, "core"));
     });
     return;
   }
 
   // ── WINTER 2024 ──
   if (screen === "winter") {
+    const winterRoutes = allRoutes.filter(r => r.pack === 'winter');
     app.innerHTML = `
       <div style="margin-bottom:28px;">
         <div class="home-eyebrow" style="text-align:left;margin-bottom:10px;">Archive</div>
@@ -743,10 +762,11 @@ function render() {
       </div>
       <div class="section-label">All Routes</div>
       <div class="route-grid">
-        ${ROUTES.filter(r=>r.pack==='winter').map(r=>{const i=ROUTES.indexOf(r);return`<button class="route-btn" data-route="${i}">${routeMiniSVG(r)}<div><div class="rname">${r.name}</div><div class="rmeta">${r.region} · ${r.stops.length} stops · ${r.decoys.length} decoys</div></div></button>`;}).join("")}
+        ${winterRoutes.map(r=>`<button class="route-btn" data-route="${r.id}">${routeMiniSVG(r)}<div><div class="rname">${r.name}</div><div class="rmeta">${r.region} · ${r.stop_count} stops · ${r.decoy_count} decoys</div></div></button>`).join("")}
       </div>`;
     document.querySelectorAll(".route-btn").forEach(btn => {
-      btn.addEventListener("click", () => startGame(ROUTES[parseInt(btn.dataset.route)], "winter"));
+      const r = allRoutes.find(r => r.id === btn.dataset.route);
+      if (r) btn.addEventListener("click", () => startGame(r, "winter"));
     });
     return;
   }
@@ -821,7 +841,7 @@ function render() {
     instruction = 'All stops placed — submit when ready';
   } else {
     const placed = Object.keys(assignments).length;
-    instruction = placed === 0 ? 'Tap a photo, then tap a numbered pin on the map' : `${placed} of ${currentRoute.stops.length} placed — keep going`;
+    instruction = placed === 0 ? 'Tap a photo, then tap a numbered pin on the map' : `${placed} of ${currentRoute.stop_count} placed — keep going`;
   }
 
   // Past guesses
@@ -836,17 +856,17 @@ function render() {
 
   // Results
   let resultsHTML = "";
-  if (revealed) {
-    const won = score === currentRoute.stops.length;
+  if (revealed && revealData) {
+    const won = score === currentRoute.stop_count;
     const guessUsed = guessHistory.length;
     const resultMsg = won
       ? guessUsed===1?"Perfect — first try!":guessUsed===2?"Got it in 2!":"Solved it!"
-      : score >= currentRoute.stops.length/2?"So close.":"Rough road.";
+      : score >= currentRoute.stop_count/2?"So close.":"Rough road.";
     resultsHTML = `
       <div class="results-inner">
-        <div class="results-score" style="color:${won?"#4ade80":"#7dd3fc"}">${won?`Solved in ${guessUsed}/${MAX_GUESSES}`:`${score}/${currentRoute.stops.length} Correct`}</div>
+        <div class="results-score" style="color:${won?"#4ade80":"#7dd3fc"}">${won?`Solved in ${guessUsed}/${MAX_GUESSES}`:`${score}/${currentRoute.stop_count} Correct`}</div>
         <div class="results-msg">${resultMsg}</div>
-        <div class="share-grid">${guessHistory.map(gh=>currentRoute.stops.map((_,i)=>{const fb=gh.feedback[i];return fb==="green"?"🟩":fb==="yellow"?"🟨":fb==="red"?"🟥":"⬜";}).join("")).join("\n")}</div>
+        <div class="share-grid">${guessHistory.map(gh=>Array.from({length:currentRoute.stop_count},(_,i)=>{const fb=gh.feedback[i];return fb==="green"?"🟩":fb==="yellow"?"🟨":fb==="red"?"🟥":"⬜";}).join("")).join("\n")}</div>
         <button class="btn-copy" id="btn-copy">Copy results</button>
         <div class="results-actions">
           <button class="btn-retry" id="btn-retry">Retry</button>
@@ -856,7 +876,7 @@ function render() {
       <div class="panel panel-padded">
         <div class="panel-label">Correct Order</div>
         <div class="reveal-grid">
-          ${currentRoute.stops.map((s,i)=>{
+          ${revealData.stops.map((s,i)=>{
             const correct=assignments[i]?.name===s.name, guessed=assignments[i];
             return `<div class="reveal-card ${correct?"correct":"wrong"}">
               <img src="${s.photo}" alt=""/>
@@ -871,7 +891,7 @@ function render() {
             </div>`;
           }).join("")}
         </div>
-        <div class="reveal-decoys">Decoys: ${currentRoute.decoys.map(d=>d.name).join(", ")}</div>
+        <div class="reveal-decoys">Decoys: ${revealData.decoy_names.join(", ")}</div>
       </div>`;
   }
 
@@ -892,7 +912,7 @@ function render() {
       </div>
       <div class="submit-wrap">
         <button id="btn-submit" class="submit-btn ${filled?"active":"inactive"}" ${filled?"":"disabled"}>
-          ${filled ? `Submit Guess ${guessNum} →` : `Place all ${currentRoute.stops.length} stops to continue`}
+          ${filled ? `Submit Guess ${guessNum} →` : `Place all ${currentRoute.stop_count} stops to continue`}
         </button>
       </div>
     </div>` : '';
@@ -920,12 +940,12 @@ function render() {
   `;
 
   // Events
-  document.getElementById("btn-submit")?.addEventListener("click", () => { if (allSlotsFilled()) checkAnswers(); });
+  document.getElementById("btn-submit")?.addEventListener("click", async () => { if (allSlotsFilled()) await checkAnswers(); });
   document.getElementById("btn-retry")?.addEventListener("click",  () => startGame(currentRoute, playSource));
   document.getElementById("btn-menu")?.addEventListener("click",   goBack);
   document.getElementById("btn-copy")?.addEventListener("click",   function() {
     const txt = `Roamer: ${currentRoute.name}\n` + guessHistory.map(gh =>
-      currentRoute.stops.map((_,i) => { const fb=gh.feedback[i]; return fb==="green"?"🟩":fb==="yellow"?"🟨":fb==="red"?"🟥":"⬜"; }).join("")
+      Array.from({length:currentRoute.stop_count},(_,i) => { const fb=gh.feedback[i]; return fb==="green"?"🟩":fb==="yellow"?"🟨":fb==="red"?"🟥":"⬜"; }).join("")
     ).join("\n");
     navigator.clipboard.writeText(txt).then(() => { this.textContent = "Copied!"; });
   });
@@ -978,7 +998,11 @@ document.getElementById('play-btn').addEventListener('click', function(e) {
   e.preventDefault();
   this.style.transform = 'scale(0.97)';
   setTimeout(() => { this.style.transform = ''; }, 150);
-  setTimeout(() => { startGame(ROUTES[DAILY_INDEX], 'home'); openOverlay(); }, 120);
+  openOverlay();
+  if (routesLoaded) {
+    setTimeout(() => { startGame(dailyRoute, 'home'); }, 120);
+  }
+  // If routes aren't loaded yet, the overlay shows "Loading routes…" until fetchRoutes completes
 });
 
 document.querySelector('.cta-secondary a').addEventListener('click', function(e) {
@@ -991,3 +1015,26 @@ if (packCards[0]) packCards[0].addEventListener('click', function() { screen = '
 if (packCards[1]) packCards[1].addEventListener('click', function() { screen = 'winter'; render(); openOverlay(); });
 
 render();
+
+
+/* ═══════════════════════════════════════════════════════
+   API FETCH
+   ═══════════════════════════════════════════════════════ */
+async function fetchRoutes() {
+  try {
+    const [dailyResp, allResp] = await Promise.all([
+      fetch(`${API_BASE}/api/v1/routes/daily`),
+      fetch(`${API_BASE}/api/v1/routes`),
+    ]);
+    if (!dailyResp.ok || !allResp.ok) throw new Error('API error');
+    dailyRoute   = await dailyResp.json();
+    allRoutes    = await allResp.json();
+    routesLoaded = true;
+    // If the overlay is open and showing loading state, refresh it
+    if (screen === 'home') render();
+  } catch (err) {
+    console.error('Failed to load routes:', err);
+  }
+}
+
+fetchRoutes();
