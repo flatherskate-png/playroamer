@@ -1210,6 +1210,7 @@ function closeOverlay() {
   if (leafletMap) { leafletMap.remove(); leafletMap = null; }
 }
 function goBack() {
+  selectedCard = null;
   if (leafletMap) { leafletMap.remove(); leafletMap = null; }
   if (playSource === 'core') { screen = 'core'; render(); }
   else closeOverlay();
