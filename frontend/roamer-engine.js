@@ -197,25 +197,50 @@ function initLeafletMap() {
   const el = document.getElementById("leaflet-map");
   if (!el || !window.L) return;
   const stops = revealData.stops;
-  const map = L.map(el, { zoomControl: true, scrollWheelZoom: false, doubleClickZoom: false, touchZoom: true });
+  const wrapping = isWrappingRoute(currentRoute);
+  const map = L.map(el, { zoomControl: true, scrollWheelZoom: false, doubleClickZoom: false, touchZoom: true, worldCopyJump: wrapping });
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 18 }).addTo(map);
-  const bounds = L.latLngBounds(stops.map(s => [s.lat, s.lng]));
-  map.fitBounds(bounds.pad(0.25));
-  L.polyline(stops.map(s => [s.lat, s.lng]), { color: "rgba(125,211,252,0.7)", weight: 3, dashArray: "8 5" }).addTo(map);
-  stops.forEach((stop, i) => {
-    const correct = assignments[i]?.name === stop.name;
-    const col = correct ? "#4ade80" : "#f87171";
-    const bg  = correct ? "rgba(22,101,52,0.85)" : "rgba(127,29,29,0.85)";
-    const icon = L.divIcon({
-      className: "",
-      html: `<div style="display:flex;flex-direction:column;align-items:center;">
-        <div style="width:28px;height:28px;border-radius:50%;background:${bg};border:2px solid ${col};display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px;font-weight:700;font-family:'DM Sans',sans-serif;">${correct ? "✓" : "✗"}</div>
-        <div style="margin-top:3px;font-family:'DM Sans',sans-serif;font-size:10px;font-weight:500;color:${col};text-shadow:0 1px 3px rgba(0,0,0,0.9);white-space:nowrap;">${stop.name}</div>
-      </div>`,
-      iconSize: [140, 50], iconAnchor: [70, 14],
+
+  if (wrapping) {
+    // For wrapping routes, use display longitudes so the polyline wraps correctly
+    const displayLngs = getDisplayLngs(currentRoute);
+    const latlngs = currentRoute.slots.map((s, i) => [s.lat, displayLngs[i]]);
+    const bounds = L.latLngBounds(latlngs);
+    map.fitBounds(bounds.pad(0.15));
+    L.polyline(latlngs, { color: "rgba(125,211,252,0.7)", weight: 3, dashArray: "8 5" }).addTo(map);
+    stops.forEach((stop, i) => {
+      const correct = assignments[i]?.name === stop.name;
+      const col = correct ? "#4ade80" : "#f87171";
+      const bg  = correct ? "rgba(22,101,52,0.85)" : "rgba(127,29,29,0.85)";
+      const icon = L.divIcon({
+        className: "",
+        html: `<div style="display:flex;flex-direction:column;align-items:center;">
+          <div style="width:28px;height:28px;border-radius:50%;background:${bg};border:2px solid ${col};display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px;font-weight:700;font-family:'DM Sans',sans-serif;">${correct ? "✓" : "✗"}</div>
+          <div style="margin-top:3px;font-family:'DM Sans',sans-serif;font-size:10px;font-weight:500;color:${col};text-shadow:0 1px 3px rgba(0,0,0,0.9);white-space:nowrap;">${stop.name}</div>
+        </div>`,
+        iconSize: [140, 50], iconAnchor: [70, 14],
+      });
+      L.marker([stop.lat, displayLngs[i]], { icon, interactive: false }).addTo(map);
     });
-    L.marker([stop.lat, stop.lng], { icon, interactive: false }).addTo(map);
-  });
+  } else {
+    const bounds = L.latLngBounds(stops.map(s => [s.lat, s.lng]));
+    map.fitBounds(bounds.pad(0.25));
+    L.polyline(stops.map(s => [s.lat, s.lng]), { color: "rgba(125,211,252,0.7)", weight: 3, dashArray: "8 5" }).addTo(map);
+    stops.forEach((stop, i) => {
+      const correct = assignments[i]?.name === stop.name;
+      const col = correct ? "#4ade80" : "#f87171";
+      const bg  = correct ? "rgba(22,101,52,0.85)" : "rgba(127,29,29,0.85)";
+      const icon = L.divIcon({
+        className: "",
+        html: `<div style="display:flex;flex-direction:column;align-items:center;">
+          <div style="width:28px;height:28px;border-radius:50%;background:${bg};border:2px solid ${col};display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px;font-weight:700;font-family:'DM Sans',sans-serif;">${correct ? "✓" : "✗"}</div>
+          <div style="margin-top:3px;font-family:'DM Sans',sans-serif;font-size:10px;font-weight:500;color:${col};text-shadow:0 1px 3px rgba(0,0,0,0.9);white-space:nowrap;">${stop.name}</div>
+        </div>`,
+        iconSize: [140, 50], iconAnchor: [70, 14],
+      });
+      L.marker([stop.lat, stop.lng], { icon, interactive: false }).addTo(map);
+    });
+  }
   leafletMap = map;
   setTimeout(() => map.invalidateSize(), 200);
 }
@@ -238,16 +263,57 @@ let cachedPinLayout  = null;    // { pts, pinR, emptyR, nudged }
 let cachedLayoutSize = null;    // { w, h } when layout was last computed
 const pinImageCache  = {};      // url -> loaded Image objects for canvas drawing
 
+// ── Wrapping route support ──
+// Detects routes that circumnavigate the globe (traveling > 300° of longitude)
+// and computes "display longitudes" that let the route read left→right
+// continuously, with the map showing the full wrap.
+function isWrappingRoute(route) {
+  const lngs = route.slots.map(s => s.lng);
+  const display = [lngs[0]];
+  for (let i = 1; i < lngs.length; i++) {
+    let d = lngs[i] - lngs[i - 1];
+    if (d > 180) d -= 360;
+    if (d < -180) d += 360;
+    display.push(display[i - 1] + d);
+  }
+  const span = Math.max(...display) - Math.min(...display);
+  return span > 300;
+}
+
+// For a wrapping route, compute display longitudes that increase
+// monotonically left-to-right. For non-wrapping routes, returns real lngs.
+function getDisplayLngs(route) {
+  if (!isWrappingRoute(route)) return route.slots.map(s => s.lng);
+  const lngs = route.slots.map(s => s.lng);
+  const display = [lngs[0]];
+  for (let i = 1; i < lngs.length; i++) {
+    let d = lngs[i] - lngs[i - 1];
+    if (d > 180) d -= 360;
+    if (d < -180) d += 360;
+    display.push(display[i - 1] + d);
+  }
+  return display;
+}
+
 function getRouteViewport(route) {
   const lats = route.slots.map(s => s.lat);
-  const lngs = route.slots.map(s => s.lng);
+  const lngs = getDisplayLngs(route);
   const routeSpanLat = Math.max(...lats) - Math.min(...lats) || 4;
   const routeSpanLng = Math.max(...lngs) - Math.min(...lngs) || 6;
   const padLat = Math.max(2.5, routeSpanLat * 0.65);
   const padLng = Math.max(2.5, routeSpanLng * 0.65);
   const centerLat = (Math.min(...lats) + Math.max(...lats)) / 2;
   const centerLng = (Math.min(...lngs) + Math.max(...lngs)) / 2;
-  return { minLat: centerLat - padLat, maxLat: centerLat + padLat, minLng: centerLng - padLng, maxLng: centerLng + padLng, centerLat, centerLng };
+  return {
+    minLat: centerLat - padLat,
+    maxLat: centerLat + padLat,
+    minLng: centerLng - padLng,
+    maxLng: centerLng + padLng,
+    centerLat,
+    centerLng,
+    wrapping: isWrappingRoute(route),
+    displayLngs: lngs,
+  };
 }
 
 function globeProject(lat, lng, rotDeg, cx, cy, R) {
@@ -281,6 +347,7 @@ function lerpProject(lat, lng, t, rotDeg, vp, W, H, cx, cy, R) {
 function computePinLayout(route, W, H) {
   const vp = getRouteViewport(route);
   const N = route.slots.length;
+  const displayLngs = vp.displayLngs || route.slots.map(s => s.lng);
 
   const MIN_PIN_R = 20;
   const MAX_PIN_R = 55;
@@ -288,8 +355,9 @@ function computePinLayout(route, W, H) {
   const MARGIN = 12;
 
   // True geo positions (fixed)
-  const truePts = route.slots.map(s => {
-    const p = flatProject(s.lat, s.lng, vp, W, H);
+  // For wrapping routes, use display longitudes so pins spread across the full map
+  const truePts = route.slots.map((s, i) => {
+    const p = flatProject(s.lat, displayLngs[i], vp, W, H);
     return {
       x: Math.max(MARGIN, Math.min(W - MARGIN, p.x)),
       y: Math.max(MARGIN, Math.min(H - MARGIN, p.y))
@@ -445,20 +513,28 @@ function drawGeoMap(t, rotDeg) {
     ctx.fillStyle = fg; ctx.fillRect(0, 0, W, H);
   }
 
-  GEO_RINGS.forEach(ring => {
-    if (ring.length < 3) return;
-    ctx.beginPath();
-    let started = false;
-    ring.forEach(([lng, lat]) => {
-      const p = lerpProject(lat, lng, t, rotDeg, vp, W, H, cx, cy, R);
-      if (p.alpha < 0.01) { started = false; return; }
-      if (!started) { ctx.moveTo(p.x, p.y); started = true; }
-      else ctx.lineTo(p.x, p.y);
+  // For wrapping routes, draw land rings shifted by +360 as well
+  const ringShifts = [0];
+  if (vp.wrapping && t > 0.3) {
+    if (vp.maxLng > 180) ringShifts.push(360);
+    if (vp.minLng < -180) ringShifts.push(-360);
+  }
+  ringShifts.forEach(shiftLng => {
+    GEO_RINGS.forEach(ring => {
+      if (ring.length < 3) return;
+      ctx.beginPath();
+      let started = false;
+      ring.forEach(([lng, lat]) => {
+        const p = lerpProject(lat, lng + shiftLng, t, rotDeg, vp, W, H, cx, cy, R);
+        if (p.alpha < 0.01) { started = false; return; }
+        if (!started) { ctx.moveTo(p.x, p.y); started = true; }
+        else ctx.lineTo(p.x, p.y);
+      });
+      if (started) ctx.closePath();
+      const lA = t < 0.5 ? 0.75 : 0.75 + (t - 0.5) * 0.5;
+      ctx.fillStyle   = `rgba(18,32,56,${lA})`; ctx.fill();
+      ctx.strokeStyle = `rgba(125,211,252,${0.08 + t * 0.08})`; ctx.lineWidth = t < 0.5 ? 0.5 : 0.7; ctx.stroke();
     });
-    if (started) ctx.closePath();
-    const lA = t < 0.5 ? 0.75 : 0.75 + (t - 0.5) * 0.5;
-    ctx.fillStyle   = `rgba(18,32,56,${lA})`; ctx.fill();
-    ctx.strokeStyle = `rgba(125,211,252,${0.08 + t * 0.08})`; ctx.lineWidth = t < 0.5 ? 0.5 : 0.7; ctx.stroke();
   });
 
   if (t < 0.7) {
@@ -493,7 +569,10 @@ function drawGeoMap(t, rotDeg) {
       const b = flatProject(lat, vp.maxLng + 10, vp, W, H);
       ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
     }
-    for (let lng2 = -180; lng2 <= 180; lng2 += 15) {
+    // Extend longitude grid lines past ±180 for wrapping routes
+    const gridLngMin = Math.floor(vp.minLng / 15) * 15;
+    const gridLngMax = Math.ceil(vp.maxLng / 15) * 15;
+    for (let lng2 = gridLngMin; lng2 <= gridLngMax; lng2 += 15) {
       ctx.beginPath();
       const a = flatProject(-80, lng2, vp, W, H);
       const b = flatProject(80,  lng2, vp, W, H);
@@ -727,12 +806,12 @@ function redrawGeoMap() {
 }
 
 function routeMiniSVG(r) {
-  const lats=r.slots.map(s=>s.lat), lngs=r.slots.map(s=>s.lng);
+  const lats=r.slots.map(s=>s.lat), lngs=getDisplayLngs(r);
   const minLat=Math.min(...lats), maxLat=Math.max(...lats), minLng=Math.min(...lngs), maxLng=Math.max(...lngs);
   const cosLat=Math.cos(((minLat+maxLat)/2*Math.PI)/180);
   const sc=Math.min(52/((maxLng-minLng||1)*cosLat),34/(maxLat-minLat||1));
   const cx2=(minLng+maxLng)/2, cy2=(minLat+maxLat)/2;
-  const pts=r.slots.map(s=>({x:36+(s.lng-cx2)*cosLat*sc, y:24-(s.lat-cy2)*sc}));
+  const pts=r.slots.map((s,i)=>({x:36+(lngs[i]-cx2)*cosLat*sc, y:24-(s.lat-cy2)*sc}));
   const d=pts.map((p,j)=>`${j===0?"M":"L"}${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(" ");
   return `<svg width="72" height="48" viewBox="0 0 72 48" style="flex-shrink:0">
     <path d="${d}" fill="none" stroke="rgba(125,211,252,0.4)" stroke-width="1.8" stroke-linecap="round" stroke-dasharray="4 3"/>
