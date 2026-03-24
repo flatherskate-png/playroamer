@@ -1193,8 +1193,10 @@ function handleCanvasTap(e) {
   const clientX = e.clientX !== undefined ? e.clientX : (e.changedTouches && e.changedTouches[0].clientX);
   const clientY = e.clientY !== undefined ? e.clientY : (e.changedTouches && e.changedTouches[0].clientY);
   if (clientX === undefined) return;
-  const x = clientX - rect.left;
-  const y = clientY - rect.top;
+  const scaleX = canvas.width / rect.width;
+  const scaleY = canvas.height / rect.height;
+  const x = (clientX - rect.left) * scaleX;
+  const y = (clientY - rect.top) * scaleY;
   if (!lastDrawnPinPts.length) return;
 
   let hit = null, hitDist = Infinity;
