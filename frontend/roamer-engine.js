@@ -1185,16 +1185,17 @@ fetchRoutes();
    CANVAS PIN HIT-TESTING
    ═══════════════════════════════════════════════════════ */
 function handleCanvasTap(e) {
+  if (e.type === 'touchend') e.preventDefault(); // suppress ghost click after touch
   const canvas = document.getElementById('route-canvas');
   if (!canvas || !currentRoute || revealed) return;
   const rect = canvas.getBoundingClientRect();
   const clientX = e.clientX !== undefined ? e.clientX : (e.changedTouches && e.changedTouches[0].clientX);
   const clientY = e.clientY !== undefined ? e.clientY : (e.changedTouches && e.changedTouches[0].clientY);
   if (clientX === undefined) return;
-  const scaleX = canvas.width / rect.width;
-  const scaleY = canvas.height / rect.height;
-  const x = (clientX - rect.left) * scaleX;
-  const y = (clientY - rect.top) * scaleY;
+  // Pin positions are stored in CSS-pixel space (drawGeoMap uses offsetWidth/offsetHeight),
+  // so compare click coords in CSS space — no DPR scaling needed here.
+  const x = clientX - rect.left;
+  const y = clientY - rect.top;
   if (!lastDrawnPinPts.length) return;
 
   let hit = null, hitDist = Infinity;
