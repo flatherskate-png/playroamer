@@ -924,7 +924,7 @@ function render() {
           <div style="flex-shrink:0;opacity:0.7;">${routeMiniSVG(daily)}</div>
         </div>
       </div>
-      <div class="section-label">Recent Travels</div>
+      <div class="section-label">Archive</div>
       <div class="route-grid">
         ${core.map(r => `<button class="route-btn" data-route="${r.id}">${routeMiniSVG(r)}<div><div class="rname">${r.name}</div><div class="rmeta">${r.region} · ${r.stop_count} stops</div></div></button>`).join("")}
       </div>
@@ -971,8 +971,8 @@ function render() {
     app.innerHTML = `
       <div style="margin-bottom:28px;">
         <div class="home-eyebrow" style="text-align:left;margin-bottom:10px;">Archive</div>
-        <h2 style="font-family:'Playfair Display',serif;font-size:1.8rem;font-weight:500;letter-spacing:-0.01em;">Recent Travels</h2>
-        <p style="font-size:0.85rem;color:var(--text-2);font-weight:300;margin-top:6px;">Recent trips you may have missed. Get on board.</p>
+        <h2 style="font-family:'Playfair Display',serif;font-size:1.8rem;font-weight:500;letter-spacing:-0.01em;">Archive</h2>
+        <p style="font-size:0.85rem;color:var(--text-2);font-weight:300;margin-top:6px;">Past daily routes and regional classics.</p>
       </div>
       <div class="section-label">All Routes</div>
       <div class="route-grid">
