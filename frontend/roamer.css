@@ -288,7 +288,7 @@ body {
 /* Locked pack cards */
 .pack-card.locked {
   pointer-events: none;
-  background: var(--bg);
+  background: var(--bg-deep);
   border-color: rgba(255,255,255,0.04);
   box-shadow: none;
 }
@@ -301,9 +301,11 @@ body {
 .pack-card.locked .card-body .card-desc  { color: var(--text-2); opacity: 0.6; }
 .card-lock-badge {
   display: inline-flex; align-items: center; gap: 5px;
-  font-size: 0.68rem; font-weight: 400; letter-spacing: 0.03em;
-  color: var(--text-2);
-  border: 1px solid rgba(255,255,255,0.1);
+  font-size: 0.62rem; font-weight: 500; letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted, var(--text-2));
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
   border-radius: 100px; padding: 4px 10px;
 }
 .card-lock-badge svg { opacity: 0.6; }
