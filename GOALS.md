@@ -38,6 +38,8 @@ A map-native pattern game that gains resolution over time. Starts with major glo
 - [ ] Re-zoom map after guess is submitted
 - [ ] After guess, photos reorder to guessed order
 - [ ] Back button should go back only one screen
+- [ ] Body scroll not locked when game overlay is open
+- [ ] Lightbox arrow navigation advances by 2 instead of 1 (possible double event binding)
 
 ### Files to integrate
 - Kate's v16 HTML is the source of truth for the current frontend
@@ -46,7 +48,7 @@ A map-native pattern game that gains resolution over time. Starts with major glo
 
 ## Next Phase: Remote Beta (25 people)
 
-- Connect backend to frontend
+- ~~Connect backend to frontend~~ ✓ Done (modular frontend fetches from FastAPI at startup)
 - Add "sign up for updates" on completion screen
 - Metrics: route starts, completions, guess count, time to complete
 
