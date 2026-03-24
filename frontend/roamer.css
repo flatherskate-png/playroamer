@@ -285,6 +285,29 @@ body {
 .card-arrow { margin-left: auto; color: var(--text-3); transition: color 0.2s, transform 0.2s; }
 .pack-card:hover .card-arrow { color: var(--cyan); transform: translateX(3px); }
 
+/* Locked pack cards */
+.pack-card.locked {
+  pointer-events: none;
+  background: var(--bg);
+  border-color: rgba(255,255,255,0.04);
+  box-shadow: none;
+}
+.pack-card.locked .card-art { filter: grayscale(1) brightness(0.35); }
+.pack-card.locked .card-art-overlay {
+  background: linear-gradient(to bottom, rgba(6,10,18,0.4) 0%, rgba(6,10,18,0.95) 100%);
+}
+.pack-card.locked .card-tag { opacity: 0.3; }
+.pack-card.locked .card-body .card-title { color: var(--text-2); }
+.pack-card.locked .card-body .card-desc  { color: var(--text-2); opacity: 0.6; }
+.card-lock-badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 0.68rem; font-weight: 400; letter-spacing: 0.03em;
+  color: var(--text-2);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 100px; padding: 4px 10px;
+}
+.card-lock-badge svg { opacity: 0.6; }
+
 .entry-footer {
   position: relative; z-index: 1;
   padding: 24px clamp(24px, 6vw, 80px) 32px;

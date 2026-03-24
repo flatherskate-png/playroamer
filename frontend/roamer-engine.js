@@ -924,7 +924,7 @@ function render() {
           <div style="flex-shrink:0;opacity:0.7;">${routeMiniSVG(daily)}</div>
         </div>
       </div>
-      <div class="section-label">Winter 2024</div>
+      <div class="section-label">Recent Travels</div>
       <div class="route-grid">
         ${core.map(r => `<button class="route-btn" data-route="${r.id}">${routeMiniSVG(r)}<div><div class="rname">${r.name}</div><div class="rmeta">${r.region} · ${r.stop_count} stops</div></div></button>`).join("")}
       </div>
@@ -971,8 +971,8 @@ function render() {
     app.innerHTML = `
       <div style="margin-bottom:28px;">
         <div class="home-eyebrow" style="text-align:left;margin-bottom:10px;">Archive</div>
-        <h2 style="font-family:'Playfair Display',serif;font-size:1.8rem;font-weight:500;letter-spacing:-0.01em;">Winter 2024</h2>
-        <p style="font-size:0.85rem;color:var(--text-2);font-weight:300;margin-top:6px;">47 days of routes from the season. Replay at your own pace.</p>
+        <h2 style="font-family:'Playfair Display',serif;font-size:1.8rem;font-weight:500;letter-spacing:-0.01em;">Recent Travels</h2>
+        <p style="font-size:0.85rem;color:var(--text-2);font-weight:300;margin-top:6px;">Recent trips you may have missed. Get on board.</p>
       </div>
       <div class="section-label">All Routes</div>
       <div class="route-grid">
@@ -1252,6 +1252,13 @@ async function fetchRoutes() {
     dailyRoute   = await dailyResp.json();
     allRoutes    = await allResp.json();
     routesLoaded = true;
+    // Update landing page card counts dynamically
+    const grandCount  = allRoutes.filter(r => r.pack === 'grand').length;
+    const recentCount = allRoutes.filter(r => r.pack === 'winter').length;
+    const grandEl  = document.getElementById('grand-count');
+    const recentEl = document.getElementById('recent-count');
+    if (grandEl)  grandEl.textContent  = grandCount  === 1 ? '1 route'  : `${grandCount} routes`;
+    if (recentEl) recentEl.textContent = recentCount === 1 ? '1 route'  : `${recentCount} routes`;
     // If the overlay is open and showing loading state, refresh it
     if (screen === 'home') render();
   } catch (err) {
