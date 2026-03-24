@@ -777,6 +777,8 @@ body {
   .entry-footer { flex-direction: column; gap: 12px; align-items: flex-start; }
 
   #route-canvas { aspect-ratio: 4 / 3; }
+  .game-layout.layout-square #route-canvas { max-height: 44vh; }
+  .game-layout.layout-tall   #route-canvas { max-height: 48vh; }
 
   #game-overlay .container { padding: 12px 14px 48px; }
   .nav { margin-bottom: 10px; padding-bottom: 10px; }

@@ -349,8 +349,9 @@ function computePinLayout(route, W, H) {
   const N = route.slots.length;
   const displayLngs = vp.displayLngs || route.slots.map(s => s.lng);
 
-  const MIN_PIN_R = 20;
-  const MAX_PIN_R = 55;
+  const minDim = Math.min(W, H);
+  const MIN_PIN_R = minDim < 350 ? 14 : 20;
+  const MAX_PIN_R = Math.min(55, Math.round(minDim / (N + 2)));
   const EMPTY_RATIO = 0.42;
   const MARGIN = 12;
 
@@ -1296,4 +1297,16 @@ function handleCanvasTap(e) {
 
   if (hit !== null) tapPin(hit);
 }
+
+let _resizeTimer;
+window.addEventListener('resize', () => {
+  clearTimeout(_resizeTimer);
+  _resizeTimer = setTimeout(() => {
+    if (screen === 'play' && !revealed) {
+      cachedPinLayout = null;
+      cachedLayoutSize = null;
+      redrawGeoMap();
+    }
+  }, 150);
+});
 
