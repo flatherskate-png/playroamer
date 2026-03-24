@@ -1218,17 +1218,12 @@ fetchRoutes();
     if (hit !== null) tapPin(hit);
   }
 
-  app.addEventListener('click', handleCanvasTap);
-  app.addEventListener('touchend', e => {
-    const canvas = document.getElementById('route-canvas');
-    if (!canvas) return;
-    const t = e.changedTouches && e.changedTouches[0];
-    if (!t) return;
-    const rect = canvas.getBoundingClientRect();
-    const pad = 20;
-    if (t.clientX < rect.left - pad || t.clientX > rect.right + pad ||
-        t.clientY < rect.top - pad  || t.clientY > rect.bottom + pad) return;
-    e.preventDefault();
-    handleCanvasTap(e);
-  }, { passive: false });
+  const routeCanvas = document.getElementById('route-canvas');
+  if (routeCanvas) {
+    routeCanvas.addEventListener('click', handleCanvasTap);
+    routeCanvas.addEventListener('touchend', e => {
+      e.preventDefault();
+      handleCanvasTap(e);
+    }, { passive: false });
+  }
 })();
