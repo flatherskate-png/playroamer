@@ -1,7 +1,7 @@
 /* ═══════════════════════════════════════════════════════
    ROAMER — Lightbox
-   Depends on: roamer-engine.js (cards, orderPicks, slotIsLocked,
-               confirmedDecoyNamesGlobal, revealed, assignments)
+   Depends on: roamer-engine.js (cards, assignments, slotIsLocked,
+               confirmedDecoyIdsGlobal, revealed, revealData)
    ═══════════════════════════════════════════════════════ */
 
 /* ═══════════════════ LIGHTBOX ═══════════════════ */
@@ -39,8 +39,10 @@ function renderLightbox() {
   if (img.complete && img.naturalWidth) img.style.opacity = '1';
 
   // Badge and elim banner
-  const pickIdx = typeof orderPicks !== 'undefined' ? orderPicks.findIndex(p => p.name === card.name) : -1;
-  const isElim = confirmedDecoyNamesGlobal.has(card.name);
+  // assignments maps slotIndex -> card; find the slot this card is placed in
+  const placedEntry = Object.entries(assignments).find(([, c]) => c.id === card.id);
+  const pickIdx = placedEntry ? parseInt(placedEntry[0]) : -1;
+  const isElim = confirmedDecoyIdsGlobal.has(card.id);
   const locked = pickIdx !== -1 && slotIsLocked(pickIdx);
   const elimBanner = document.getElementById('lb-elim-banner');
 
@@ -64,9 +66,20 @@ function renderLightbox() {
     elimBanner.classList.remove('visible');
   }
 
-  // Name: only show if revealed, otherwise hide
-  if (revealed) {
-    nameEl.textContent = card.name + (card.isDecoy ? ' (decoy)' : '');
+  // Name: only show if revealed and revealData is available
+  if (revealed && revealData) {
+    // card.id is "stop_N" or "decoy_N" — look up the name from revealData
+    const stopMatch = card.id.match(/^stop_(\d+)$/);
+    const decoyMatch = card.id.match(/^decoy_(\d+)$/);
+    let displayName = '';
+    if (stopMatch) {
+      const idx = parseInt(stopMatch[1]);
+      displayName = revealData.stops[idx]?.name || '';
+    } else if (decoyMatch) {
+      const idx = parseInt(decoyMatch[1]);
+      displayName = revealData.decoy_names[idx] ? revealData.decoy_names[idx] + ' (decoy)' : '(decoy)';
+    }
+    nameEl.textContent = displayName;
     nameEl.className = 'lb-name revealed-name';
   } else {
     nameEl.textContent = '';
@@ -76,12 +89,12 @@ function renderLightbox() {
 
   // Dots
   dotsEl.innerHTML = cards.map((c, i) => {
-    const pi = typeof orderPicks !== 'undefined' ? orderPicks.findIndex(p => p.name === c.name) : -1;
-    const eli = confirmedDecoyNamesGlobal.has(c.name);
+    const placed = Object.values(assignments).some(a => a.id === c.id);
+    const eli = confirmedDecoyIdsGlobal.has(c.id);
     let cls = 'lb-dot';
     if (i === lightboxIndex) cls += ' active';
     else if (eli) cls += ' elim';
-    else if (pi !== -1) cls += ' picked';
+    else if (placed) cls += ' picked';
     return `<div class="${cls}" data-idx="${i}"></div>`;
   }).join('');
 

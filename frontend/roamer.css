@@ -539,6 +539,98 @@ body {
 
 
 /* ═══════════════════════════════════════════════════════
+   COMPLETION SCREEN — drc-* components
+   ═══════════════════════════════════════════════════════ */
+
+.completion-layout { max-width: 600px; margin: 0 auto; padding-bottom: 40px; }
+
+/* Map hero — top corners rounded, bottom flat to fuse with perf band */
+.drc-map-wrap { border-radius: 16px 16px 0 0; overflow: hidden; border: 1px solid var(--border); border-bottom: none; }
+.drc-map-wrap #leaflet-map { height: min(50vh, 400px); min-height: 260px; }
+
+/* Perf + metrics band fused to map bottom */
+.drc-perf-band {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-top: none;
+  border-radius: 0 0 16px 16px;
+  padding: 18px 20px 16px;
+  text-align: center;
+  margin-bottom: 16px;
+}
+.drc-perf { font-family: 'Playfair Display', serif; font-size: 2.6rem; font-weight: 500; letter-spacing: -0.03em; line-height: 1; }
+.drc-perf-band .drc-perf { font-size: 2.2rem; margin-bottom: 12px; }
+.drc-perf-band .drc-metrics { margin-bottom: 0; }
+
+/* Metrics row */
+.drc-metrics { display: flex; align-items: stretch; border-radius: 12px; overflow: hidden; border: 1px solid var(--border); margin-bottom: 24px; }
+.drc-metric { flex: 1; padding: 14px 6px; display: flex; flex-direction: column; align-items: center; gap: 5px; min-width: 0; }
+.drc-metric-divider { width: 1px; background: var(--border); align-self: stretch; flex-shrink: 0; }
+.drc-metric-val { font-size: 1.3rem; font-weight: 700; color: var(--text); white-space: nowrap; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; line-height: 1; }
+.drc-metric-of { font-size: 0.78rem; font-weight: 400; color: var(--text-3); }
+.drc-metric-label { font-size: 0.6rem; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.08em; }
+
+/* Guess history with visual photo cells */
+.drc-guess-history { margin-bottom: 16px; }
+.drc-guess-row { background: var(--bg-panel); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; margin-bottom: 8px; }
+.drc-guess-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.drc-guess-label { font-size: 0.68rem; font-weight: 500; color: var(--text-2); letter-spacing: 0.06em; }
+.drc-guess-score { font-size: 0.68rem; font-weight: 600; letter-spacing: 0.04em; }
+.drc-guess-cells { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+.drc-guess-cell { width: clamp(42px, 12vw, 56px); height: clamp(32px, 9vw, 42px); border-radius: 7px; position: relative; overflow: hidden; }
+.drc-guess-cell img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.drc-cell-overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+.drc-cell-icon { width: 18px; height: 18px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.55rem; font-weight: 700; color: #fff; }
+
+/* Share row */
+.drc-share-row { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; justify-content: center; background: var(--bg-panel); border: 1px solid var(--border); border-radius: 14px; padding: 14px 18px; }
+.drc-share-grid { font-size: 1.1rem; line-height: 1.7; text-align: left; flex-shrink: 0; }
+.drc-share-copy { background: rgba(255,255,255,0.06); border: 1px solid var(--border); color: var(--text-2); padding: 6px 14px; border-radius: 8px; cursor: pointer; font-family: inherit; font-size: 0.72rem; transition: background 0.2s; white-space: nowrap; }
+.drc-share-copy:hover { background: rgba(255,255,255,0.1); }
+
+/* Stop list */
+.drc-stop-list { display: flex; flex-direction: column; margin-bottom: 10px; border-radius: 14px; overflow: hidden; border: 1px solid var(--border); }
+.drc-stop-item { display: flex; align-items: center; gap: 12px; padding: 10px 14px; background: var(--bg-panel); transition: background 0.15s; }
+.drc-stop-item:hover { background: rgba(255,255,255,0.025); }
+.drc-stop-item + .drc-stop-item { border-top: 1px solid var(--border); }
+.drc-stop-img-wrap { position: relative; flex-shrink: 0; }
+.drc-stop-img { width: 52px; height: 52px; object-fit: cover; border-radius: 8px; display: block; }
+.drc-stop-badge { position: absolute; bottom: -4px; right: -4px; width: 18px; height: 18px; border-radius: 50%; font-size: 0.6rem; font-weight: 700; color: #fff; display: flex; align-items: center; justify-content: center; border: 1.5px solid var(--bg-panel); }
+.drc-badge-correct { background: #16a34a; }
+.drc-badge-wrong   { background: #dc2626; }
+.drc-stop-details { min-width: 0; flex: 1; }
+.drc-stop-num-label { font-size: 0.62rem; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 2px; }
+.drc-stop-name-label { font-size: 0.9rem; font-weight: 500; color: var(--text); }
+.drc-stop-your-guess { font-size: 0.7rem; color: #f87171; margin-top: 2px; }
+.drc-decoys { font-size: 0.68rem; color: var(--text-3); text-align: center; margin-bottom: 16px; }
+
+/* Route blurb */
+.drc-fact { background: var(--bg-panel); border: 1px solid var(--border); border-radius: 14px; padding: 18px; margin-bottom: 16px; text-align: left; }
+.drc-fact-text { font-size: 0.83rem; color: var(--text-2); line-height: 1.65; font-style: italic; }
+
+/* Reactions */
+.drc-reaction-prompt { font-size: 0.68rem; color: var(--text-3); margin-bottom: 8px; }
+.drc-reactions { background: var(--bg-panel); border: 1px solid var(--border); border-radius: 14px; padding: 14px; display: flex; flex-direction: column; gap: 6px; margin-bottom: 20px; }
+.drc-reaction {
+  display: flex; align-items: center; gap: 10px;
+  background: rgba(255,255,255,0.02); border: 1px solid var(--border);
+  border-radius: 10px; padding: 11px 14px; cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  font-family: 'DM Sans', sans-serif; text-align: left; width: 100%;
+}
+.drc-reaction:hover { background: rgba(255,255,255,0.05); }
+.drc-reaction:active { transform: scale(0.99); }
+.drc-reaction-icon { font-size: 1rem; flex-shrink: 0; width: 22px; text-align: center; }
+.drc-reaction-label { font-size: 0.83rem; color: var(--text-2); font-weight: 400; }
+.drc-reaction-active { background: rgba(125,211,252,0.06); border-color: rgba(125,211,252,0.3); }
+.drc-reaction-active .drc-reaction-label { color: var(--text); font-weight: 500; }
+.drc-reaction-check { margin-left: auto; font-size: 0.75rem; color: var(--cyan); opacity: 0; transition: opacity 0.15s; }
+.drc-reaction-active .drc-reaction-check { opacity: 1; }
+
+.drc-actions { display: flex; gap: 10px; justify-content: center; margin-bottom: 16px; flex-wrap: wrap; }
+
+
+/* ═══════════════════════════════════════════════════════
    COLLAPSIBLE MAP PANEL
    ═══════════════════════════════════════════════════════ */
 

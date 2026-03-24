@@ -7,11 +7,18 @@
 // ── API ──
 const API_BASE = 'http://localhost:8000';
 
+// ── Feedback result mapping (semantic API values → display) ──
+const FEEDBACK = {
+  correct:    { bg: "rgba(22,101,52,0.3)",   border: "#4ade80", icon: "✓", emoji: "🟩" },
+  wrong_slot: { bg: "rgba(113,63,18,0.35)",  border: "#facc15", icon: "↕", emoji: "🟨" },
+  decoy:      { bg: "rgba(127,29,29,0.3)",   border: "#f87171", icon: "✗", emoji: "🟥" },
+};
+
 // ── Remote state ──
 let dailyRoute   = null;   // RoutePublic from /routes/daily
 let allRoutes    = [];     // RoutePublic[] from /routes
 let routesLoaded = false;
-let revealData   = null;   // RouteReveal from /routes/{id}/reveal (post-game)
+let revealData   = null;   // RouteRevealed from /routes/{id}/reveal (post-game)
 
 // ── State ──
 let screen       = "home";
@@ -24,7 +31,7 @@ let history      = [];
 let leafletMap   = null;
 let playSource   = "home";
 let lightboxIndex = null;
-let confirmedDecoyNamesGlobal = new Set();
+let confirmedDecoyIdsGlobal = new Set();
 
 // selected photo card (held in hand)
 let selectedCard = null;
@@ -93,18 +100,18 @@ function startGame(r, source) {
 
 function slotIsLocked(i) {
   if (guessHistory.length === 0) return false;
-  return guessHistory[guessHistory.length - 1].feedback[i] === "green";
+  return guessHistory[guessHistory.length - 1].feedback[i] === "correct";
 }
 
 // ── Interaction: tap a photo ──
 function tapPhoto(card) {
   if (revealed) return;
-  const isDecoyElim = confirmedDecoyNamesGlobal.has(card.name);
+  const isDecoyElim = confirmedDecoyIdsGlobal.has(card.id);
   if (isDecoyElim) return;
 
-  const placedSlot = Object.entries(assignments).find(([, c]) => c.name === card.name);
+  const placedSlot = Object.entries(assignments).find(([, c]) => c.id === card.id);
 
-  if (selectedCard?.name === card.name) {
+  if (selectedCard?.id === card.id) {
     selectedCard = null;
   } else if (placedSlot) {
     const slotIdx = parseInt(placedSlot[0]);
@@ -144,7 +151,7 @@ async function checkAnswers() {
   const guessNumber = guessHistory.length + 1;
   const assignmentsList = Object.entries(assignments).map(([slot, card]) => ({
     slot_index: parseInt(slot),
-    photo_name: card.name,
+    photo_id: card.id,
   }));
 
   const btn = document.getElementById('btn-submit');
@@ -179,7 +186,7 @@ async function checkAnswers() {
     } else {
       const newAssignments = {};
       Array.from({length: currentRoute.stop_count}, (_, i) => i).forEach(i => {
-        if (feedback[i] === "green") newAssignments[i] = assignments[i];
+        if (feedback[i] === "correct") newAssignments[i] = assignments[i];
       });
       assignments  = newAssignments;
       selectedCard = null;
@@ -201,6 +208,9 @@ function initLeafletMap() {
   const map = L.map(el, { zoomControl: true, scrollWheelZoom: false, doubleClickZoom: false, touchZoom: true, worldCopyJump: wrapping });
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 18 }).addTo(map);
 
+  // Correctness comes from the final guess's feedback (server is the truth)
+  const finalFeedback = guessHistory.length > 0 ? guessHistory[guessHistory.length - 1].feedback : {};
+
   if (wrapping) {
     // For wrapping routes, use display longitudes so the polyline wraps correctly
     const displayLngs = getDisplayLngs(currentRoute);
@@ -209,7 +219,7 @@ function initLeafletMap() {
     map.fitBounds(bounds.pad(0.15));
     L.polyline(latlngs, { color: "rgba(125,211,252,0.7)", weight: 3, dashArray: "8 5" }).addTo(map);
     stops.forEach((stop, i) => {
-      const correct = assignments[i]?.name === stop.name;
+      const correct = finalFeedback[i] === "correct";
       const col = correct ? "#4ade80" : "#f87171";
       const bg  = correct ? "rgba(22,101,52,0.85)" : "rgba(127,29,29,0.85)";
       const icon = L.divIcon({
@@ -227,7 +237,7 @@ function initLeafletMap() {
     map.fitBounds(bounds.pad(0.25));
     L.polyline(stops.map(s => [s.lat, s.lng]), { color: "rgba(125,211,252,0.7)", weight: 3, dashArray: "8 5" }).addTo(map);
     stops.forEach((stop, i) => {
-      const correct = assignments[i]?.name === stop.name;
+      const correct = finalFeedback[i] === "correct";
       const col = correct ? "#4ade80" : "#f87171";
       const bg  = correct ? "rgba(22,101,52,0.85)" : "rgba(127,29,29,0.85)";
       const icon = L.divIcon({
@@ -821,10 +831,10 @@ function routeMiniSVG(r) {
 }
 
 function frozenRowHTML(gh, guessNum) {
-  const FB_BG = {green:"rgba(22,101,52,0.3)",yellow:"rgba(113,63,18,0.35)",red:"rgba(127,29,29,0.3)"};
-  const FB_BD = {green:"#4ade80",yellow:"#facc15",red:"#f87171"};
-  const FB_IC = {green:"✓",yellow:"↕",red:"✗"};
-  const correct = Object.values(gh.feedback).filter(f => f === "green").length;
+  const FB_BG = Object.fromEntries(Object.entries(FEEDBACK).map(([k,v]) => [k, v.bg]));
+  const FB_BD = Object.fromEntries(Object.entries(FEEDBACK).map(([k,v]) => [k, v.border]));
+  const FB_IC = Object.fromEntries(Object.entries(FEEDBACK).map(([k,v]) => [k, v.icon]));
+  const correct = Object.values(gh.feedback).filter(f => f === "correct").length;
   const scoreCol = correct === currentRoute.stop_count ? "#4ade80" : "#7dd3fc";
   return `<div class="frozen-row">
     <div class="frozen-label">
@@ -861,7 +871,7 @@ function render() {
       let cls = "pip";
       if (i < guessHistory.length) {
         const gh = guessHistory[i];
-        const c  = Object.values(gh.feedback).filter(f=>f==="green").length;
+        const c  = Object.values(gh.feedback).filter(f=>f==="correct").length;
         cls += c === currentRoute.stop_count ? " correct" : " used";
       }
       return `<div class="${cls}"></div>`;
@@ -986,25 +996,25 @@ function render() {
   }
 
   // ── PLAY ──
-  const confirmedDecoyNames = new Set();
+  const confirmedDecoyIds = new Set();
   guessHistory.forEach(gh => {
     Object.entries(gh.feedback).forEach(([si, fb]) => {
-      if (fb === "red") { const c = gh.assignments[si]; if (c) confirmedDecoyNames.add(c.name); }
+      if (fb === "decoy") { const c = gh.assignments[si]; if (c) confirmedDecoyIds.add(c.id); }
     });
   });
-  confirmedDecoyNamesGlobal = confirmedDecoyNames;
+  confirmedDecoyIdsGlobal = confirmedDecoyIds;
 
   const filled   = allSlotsFilled();
   const guessNum = guessHistory.length + 1;
 
   // ── Photo grid ──
   const photoGridHTML = cards.map(c => {
-    const isDecoyElim = confirmedDecoyNames.has(c.name);
-    const placedSlot  = Object.entries(assignments).find(([, a]) => a.name === c.name);
+    const isDecoyElim = confirmedDecoyIds.has(c.id);
+    const placedSlot  = Object.entries(assignments).find(([, a]) => a.id === c.id);
     const slotIdx     = placedSlot ? parseInt(placedSlot[0]) : -1;
     const isPlaced    = slotIdx !== -1;
     const locked      = isPlaced && slotIsLocked(slotIdx);
-    const isSelected  = selectedCard?.name === c.name;
+    const isSelected  = selectedCard?.id === c.id;
 
     let borderCol;
     if (isDecoyElim)     borderCol = 'rgba(248,113,113,0.3)';
@@ -1029,7 +1039,7 @@ function render() {
       ? `<div style="position:absolute;inset:-3px;border-radius:17px;border:2px solid var(--cyan);animation:pin-pulse 1s ease-in-out infinite;pointer-events:none;"></div>`
       : '';
 
-    return `<div class="tap-card" data-name="${c.name}"
+    return `<div class="tap-card" data-id="${c.id}"
       style="position:relative;aspect-ratio:1/1;border-radius:14px;overflow:visible;
              opacity:${opacity};cursor:${cursor};${scale}transition:transform 0.15s,opacity 0.2s;">
       <div style="position:absolute;inset:0;border-radius:14px;overflow:hidden;z-index:1;
@@ -1050,7 +1060,7 @@ function render() {
   // Instruction text
   let instruction;
   if (selectedCard) {
-    instruction = `<span style="color:var(--cyan);">${selectedCard.name?.split(',')[0] ?? 'Photo'}</span> selected — tap a pin to place it`;
+    instruction = `<span style="color:var(--cyan);">Photo</span> selected — tap a pin to place it`;
   } else if (filled) {
     instruction = 'All stops placed — submit when ready';
   } else {
@@ -1068,105 +1078,220 @@ function render() {
        </div>`
     : "";
 
-  // Results
-  let resultsHTML = "";
+  // ── Completion screen ──
+  let completionHTML = "";
   if (revealed && revealData) {
     const won = score === currentRoute.stop_count;
     const guessUsed = guessHistory.length;
-    const resultMsg = won
-      ? guessUsed===1?"Perfect — first try!":guessUsed===2?"Got it in 2!":"Solved it!"
-      : score >= currentRoute.stop_count/2?"So close.":"Rough road.";
-    resultsHTML = `
-      <div class="results-inner">
-        <div class="results-score" style="color:${won?"#4ade80":"#7dd3fc"}">${won?`Solved in ${guessUsed}/${MAX_GUESSES}`:`${score}/${currentRoute.stop_count} Correct`}</div>
-        <div class="results-msg">${resultMsg}</div>
-        <div class="share-grid">${guessHistory.map(gh=>Array.from({length:currentRoute.stop_count},(_,i)=>{const fb=gh.feedback[i];return fb==="green"?"🟩":fb==="yellow"?"🟨":fb==="red"?"🟥":"⬜";}).join("")).join("\n")}</div>
-        <button class="btn-copy" id="btn-copy">Copy results</button>
-        <div class="results-actions">
-          <button class="btn-retry" id="btn-retry">Retry</button>
-          <button class="btn-menu"  id="btn-menu">← Back</button>
+    const isDaily = playSource === 'home';
+    const perfLabel = won
+      ? guessUsed === 1 ? 'Perfect' : guessUsed === 2 ? 'Sharp' : 'Solid'
+      : score >= currentRoute.stop_count * 0.75 ? 'Close' : score >= currentRoute.stop_count * 0.5 ? 'Halfway' : 'Rough road';
+    const perfColor = won ? '#4ade80' : score >= currentRoute.stop_count / 2 ? '#7dd3fc' : '#f87171';
+
+    // Guess history rows with visual photo cells
+    const FB_BG_C = Object.fromEntries(Object.entries(FEEDBACK).map(([k,v]) => [k, v.bg.replace("0.3","0.45").replace("0.35","0.45")]));
+    const FB_BD_C = Object.fromEntries(Object.entries(FEEDBACK).map(([k,v]) => [k, v.border]));
+    const FB_IC_C = Object.fromEntries(Object.entries(FEEDBACK).map(([k,v]) => [k, v.icon]));
+    const guessHistoryHTML = guessHistory.map((gh, gi) => {
+      const guessCorrect = Object.values(gh.feedback).filter(f => f === "correct").length;
+      const guessScoreColor = guessCorrect === currentRoute.stop_count ? '#4ade80' : guessCorrect > 0 ? '#7dd3fc' : '#f87171';
+      const cells = Array.from({ length: currentRoute.stop_count }, (_, i) => {
+        const card = gh.assignments[i];
+        const fb = gh.feedback[i];
+        const bd = fb ? FB_BD_C[fb] : "rgba(255,255,255,0.1)";
+        const bg = fb ? FB_BG_C[fb] : "rgba(255,255,255,0.03)";
+        const icon = fb ? FB_IC_C[fb] : '';
+        const iconBg = fb ? FB_BD_C[fb] : 'transparent';
+        return `<div class="drc-guess-cell" style="border:1.5px solid ${bd};background:${bg};">
+          ${card ? `<img src="${card.photo}" onerror="this.style.display='none'"/>` : `<div style="display:flex;align-items:center;justify-content:center;height:100%;font-size:0.7rem;color:rgba(255,255,255,0.15);">${i + 1}</div>`}
+          ${fb ? `<div class="drc-cell-overlay"><div class="drc-cell-icon" style="background:${iconBg};">${icon}</div></div>` : ''}
+        </div>`;
+      }).join('');
+      return `<div class="drc-guess-row">
+        <div class="drc-guess-header">
+          <div class="drc-guess-label">Guess ${gi + 1} of ${MAX_GUESSES}</div>
+          <div class="drc-guess-score" style="color:${guessScoreColor};">${guessCorrect}/${currentRoute.stop_count}</div>
+        </div>
+        <div class="drc-guess-cells">${cells}</div>
+      </div>`;
+    }).join('');
+
+    // Share emoji grid
+    const shareEmoji = guessHistory.map(gh =>
+      Array.from({ length: currentRoute.stop_count }, (_, i) => {
+        const fb = gh.feedback[i];
+        return FEEDBACK[fb]?.emoji ?? "⬜";
+      }).join("")
+    ).join("\n");
+
+    // Streak metric — only for daily (home) plays
+    const streakMetric = isDaily ? `
+      <div class="drc-metric-divider"></div>
+      <div class="drc-metric">
+        <div class="drc-metric-val">—</div>
+        <div class="drc-metric-label">day streak</div>
+      </div>` : '';
+
+    // Final feedback for stop-list correctness
+    const finalFeedback = guessHistory.length > 0 ? guessHistory[guessHistory.length - 1].feedback : {};
+
+    // Stored reaction
+    const reactionStored = (loadStopFlags()['__route__' + currentRoute.id] || {}).reaction;
+
+    completionHTML = `<div class="completion-layout">
+      <!-- Map hero -->
+      <div class="drc-map-wrap"><div id="leaflet-map"></div></div>
+
+      <!-- Perf band fused to map bottom -->
+      <div class="drc-perf-band">
+        <div class="drc-perf" style="color:${perfColor}">${perfLabel}</div>
+        <div class="drc-metrics">
+          <div class="drc-metric">
+            <div class="drc-metric-val">${guessUsed}<span class="drc-metric-of">/${MAX_GUESSES}</span></div>
+            <div class="drc-metric-label">guesses</div>
+          </div>
+          <div class="drc-metric-divider"></div>
+          <div class="drc-metric">
+            <div class="drc-metric-val">${score}<span class="drc-metric-of">/${currentRoute.stop_count}</span></div>
+            <div class="drc-metric-label">correct</div>
+          </div>
+          ${streakMetric}
         </div>
       </div>
-      <div class="panel panel-padded">
-        <div class="panel-label">Correct Order</div>
-        <div class="reveal-grid">
-          ${revealData.stops.map((s,i)=>{
-            const correct=assignments[i]?.name===s.name, guessed=assignments[i];
-            return `<div class="reveal-card ${correct?"correct":"wrong"}">
-              <img src="${s.photo}" alt=""/>
-              <div class="reveal-overlay">
-                <div class="reveal-top"><div class="reveal-num">${i+1}</div><div class="reveal-check">${correct?"✓":"✗"}</div></div>
-                <div>
-                  <div class="reveal-name">${s.name}</div>
-                  ${!correct&&guessed?`<div class="reveal-guess">you: ${guessed.name}</div>`:""}
-                  ${!correct&&!guessed?`<div class="reveal-guess">no answer</div>`:""}
-                </div>
-              </div>
-            </div>`;
-          }).join("")}
-        </div>
-        <div class="reveal-decoys">Decoys: ${revealData.decoy_names.join(", ")}</div>
-      </div>`;
+
+      <!-- Guess history -->
+      <div class="drc-guess-history">${guessHistoryHTML}</div>
+
+      <!-- Share row -->
+      <div class="drc-share-row">
+        <div class="drc-share-grid">${shareEmoji}</div>
+        <button class="drc-share-copy" id="btn-copy">Copy</button>
+      </div>
+
+      <!-- Stop list -->
+      <div class="drc-stop-list">
+        ${revealData.stops.map((s, i) => {
+          const correct = finalFeedback[i] === "correct";
+          return `<div class="drc-stop-item">
+            <div class="drc-stop-img-wrap">
+              <img src="${s.photo}" class="drc-stop-img" alt=""/>
+              <div class="drc-stop-badge ${correct ? 'drc-badge-correct' : 'drc-badge-wrong'}">${correct ? '✓' : '✗'}</div>
+            </div>
+            <div class="drc-stop-details">
+              <div class="drc-stop-num-label">Stop ${i + 1}</div>
+              <div class="drc-stop-name-label">${s.name}</div>
+              ${!correct && finalFeedback[i] !== undefined ? `<div class="drc-stop-your-guess">not placed correctly</div>` : ''}
+              ${finalFeedback[i] === undefined ? `<div class="drc-stop-your-guess">not answered</div>` : ''}
+            </div>
+          </div>`;
+        }).join('')}
+      </div>
+      <div class="drc-decoys">Decoys: ${revealData.decoy_names.join(', ')}</div>
+
+      <!-- Route blurb -->
+      ${revealData.blurb ? `<div class="drc-fact"><div class="drc-fact-text">${revealData.blurb}</div></div>` : ''}
+
+      <!-- Reactions -->
+      <div class="drc-reaction-prompt">Have you been here?</div>
+      <div class="drc-reactions">
+        ${[
+          { type: 'bucket',       icon: '🌟', label: 'Bucket list — adding it to my list'  },
+          { type: 'progress',     icon: '🗺️', label: 'In progress — still exploring'        },
+          { type: 'accomplished', icon: '✈️', label: 'Mission accomplished — been there'    },
+        ].map(({ type, icon, label }) => `
+          <button class="drc-reaction ${reactionStored === type ? 'drc-reaction-active' : ''}" data-reaction="${type}">
+            <span class="drc-reaction-icon">${icon}</span>
+            <span class="drc-reaction-label">${label}</span>
+            <span class="drc-reaction-check">✓</span>
+          </button>`).join('')}
+      </div>
+
+      <!-- Actions -->
+      <div class="drc-actions">
+        <button class="btn-retry" id="btn-retry">Retry</button>
+        <button class="btn-menu" id="btn-menu">← Back</button>
+      </div>
+    </div>`;
   }
 
-  // Map panel — no toggle header, always shown
-  const mapContentHTML = revealed
-    ? `<div style="padding:6px"><div id="leaflet-map"></div></div>`
-    : `<div style="padding:6px">
-         <div id="map-canvas-wrapper" style="position:relative;width:100%;">
-           <canvas id="route-canvas" style="width:100%;height:auto;display:block;border-radius:10px;"></canvas>
-         </div>
-       </div>`;
+  // Map panel — play mode only (completion has its own map inside completionHTML)
+  const mapContentHTML = `<div style="padding:6px">
+       <div id="map-canvas-wrapper" style="position:relative;width:100%;">
+         <canvas id="route-canvas" style="width:100%;height:auto;display:block;border-radius:10px;"></canvas>
+       </div>
+     </div>`;
 
   // Photo panel
-  const photoPanelHTML = !revealed ? `
+  const photoPanelHTML = `
     <div class="panel panel-padded photo-panel" id="photo-panel">
       <div class="tap-grid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;">
         ${photoGridHTML}
       </div>
       <div class="submit-wrap">
-        <button id="btn-submit" class="submit-btn ${filled?"active":"inactive"}" ${filled?"":"disabled"}>
+        <button id="btn-submit" class="submit-btn ${filled ? "active" : "inactive"}" ${filled ? "" : "disabled"}>
           ${filled ? `Submit Guess ${guessNum} →` : `Place all ${currentRoute.stop_count} stops to continue`}
         </button>
       </div>
-    </div>` : '';
+    </div>`;
 
-  // Layout — no separate play-header; it's merged into nav above
-  app.innerHTML = isLandscape && !revealed ? `
-    ${historyHTML}
-    <div class="play-landscape-row">
-      <div class="play-col-map">
-        <div class="map-panel landscape-map-panel" id="map-panel">
-          ${mapContentHTML}
+  // Layout
+  if (revealed) {
+    app.innerHTML = completionHTML;
+  } else if (isLandscape) {
+    app.innerHTML = `
+      ${historyHTML}
+      <div class="play-landscape-row">
+        <div class="play-col-map">
+          <div class="map-panel landscape-map-panel" id="map-panel">
+            ${mapContentHTML}
+          </div>
         </div>
+        <div class="play-col-photos">
+          ${photoPanelHTML}
+        </div>
+      </div>`;
+  } else {
+    app.innerHTML = `
+      ${historyHTML}
+      <div class="map-panel" id="map-panel">
+        ${mapContentHTML}
       </div>
-      <div class="play-col-photos">
-        ${photoPanelHTML}
-      </div>
-    </div>
-  ` : `
-    ${!revealed ? historyHTML : ''}
-    <div class="map-panel" id="map-panel">
-      ${mapContentHTML}
-    </div>
-    ${photoPanelHTML}
-    ${resultsHTML}
-  `;
+      ${photoPanelHTML}`;
+  }
 
   // Events
   document.getElementById("btn-submit")?.addEventListener("click", async () => { if (allSlotsFilled()) await checkAnswers(); });
   document.getElementById("btn-retry")?.addEventListener("click",  () => startGame(currentRoute, playSource));
   document.getElementById("btn-menu")?.addEventListener("click",   goBack);
   document.getElementById("btn-copy")?.addEventListener("click",   function() {
-    const txt = `Roamer: ${currentRoute.name}\n` + guessHistory.map(gh =>
-      Array.from({length:currentRoute.stop_count},(_,i) => { const fb=gh.feedback[i]; return fb==="green"?"🟩":fb==="yellow"?"🟨":fb==="red"?"🟥":"⬜"; }).join("")
+    const shareEmoji = guessHistory.map(gh =>
+      Array.from({ length: currentRoute.stop_count }, (_, i) => {
+        const fb = gh.feedback[i];
+        return FEEDBACK[fb]?.emoji ?? "⬜";
+      }).join("")
     ).join("\n");
+    const txt = `Roamer: ${currentRoute.name}\n${shareEmoji}`;
     navigator.clipboard.writeText(txt).then(() => { this.textContent = "Copied!"; });
+  });
+  // Route reaction buttons
+  document.querySelectorAll('.drc-reaction').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const type = btn.dataset.reaction;
+      const key = '__route__' + currentRoute.id;
+      const flags = loadStopFlags();
+      if (!flags[key]) flags[key] = {};
+      flags[key].reaction = flags[key].reaction === type ? null : type;
+      saveStopFlags(flags);
+      document.querySelectorAll('.drc-reaction').forEach(b => {
+        b.classList.toggle('drc-reaction-active', b.dataset.reaction === flags[key].reaction);
+      });
+    });
   });
 
   document.querySelectorAll(".tap-card").forEach(el => {
-    const name = el.dataset.name;
-    const card = cards.find(c => c.name === name);
+    const id = el.dataset.id;
+    const card = cards.find(c => c.id === id);
     if (!card) return;
     el.addEventListener("click", e => {
       if (e.target.closest('.expand-btn')) return;
