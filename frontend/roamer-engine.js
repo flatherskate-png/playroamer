@@ -82,6 +82,7 @@ function startGame(r, source) {
   guessHistory     = [];
   lastFeedback     = {};
   cachedPinLayout = null;
+  pinListenersAttached = false;
   // Clear pin image cache for new route
   Object.keys(pinImageCache).forEach(k => delete pinImageCache[k]);
   if (leafletMap)  { leafletMap.remove(); leafletMap = null; }
@@ -232,7 +233,6 @@ let geoRot         = 0;
 let geoAnimHandle  = null;
 let geoAnimating   = false;
 let lastDrawnPinPts  = []; // nudged pin positions for hit-testing
-let lastTruePts      = []; // true geo positions for hit-testing
 let lastPinR         = 30; // current filled pin radius
 let lastEmptyR       = 12; // current empty pin radius
 let cachedPinLayout  = null;    // { pts, pinR, emptyR, nudged }
@@ -279,11 +279,7 @@ function lerpProject(lat, lng, t, rotDeg, vp, W, H, cx, cy, R) {
   return { x: gp.x + (fp.x - gp.x) * t, y: gp.y + (fp.y - gp.y) * t, alpha: vis };
 }
 
-function computePinLayout(route) {
-  const canvas = document.getElementById('route-canvas');
-  if (!canvas) return { pts: [], pinR: 20, emptyR: 10, nudged: [] };
-  const W = canvas.offsetWidth || 800;
-  const H = canvas.offsetHeight || 400;
+function computePinLayout(route, W, H) {
   const vp = getRouteViewport(route);
   const N = route.slots.length;
 
@@ -514,7 +510,7 @@ function drawGeoMap(t, rotDeg) {
     // Recompute pin layout if canvas resized or not yet computed
     if (!cachedPinLayout || (cachedLayoutSize &&
         (Math.abs(W - cachedLayoutSize.w) > 30 || Math.abs(H - cachedLayoutSize.h) > 30))) {
-      cachedPinLayout = computePinLayout(currentRoute);
+      cachedPinLayout = computePinLayout(currentRoute, W, H);
       cachedLayoutSize = { w: W, h: H };
     }
     const layout = cachedPinLayout;
@@ -525,7 +521,6 @@ function drawGeoMap(t, rotDeg) {
 
     // Update hit-test caches
     lastDrawnPinPts = nudgedPts.map(p => ({ ...p }));
-    lastTruePts = truePts.map(p => ({ ...p }));
     lastPinR = pinR;
     lastEmptyR = emptyR;
 
@@ -1101,6 +1096,14 @@ function render() {
   });
 
   if (!revealed) {
+    if (!pinListenersAttached) {
+      const canvas = document.getElementById('route-canvas');
+      if (canvas) {
+        canvas.addEventListener('click', handleCanvasTap);
+        canvas.addEventListener('touchend', handleCanvasTap, { passive: false });
+        pinListenersAttached = true;
+      }
+    }
     if (geoT === 0 && !geoAnimating) {
       startGeoAnimation();
     } else if (!geoAnimating) {
@@ -1183,47 +1186,35 @@ fetchRoutes();
 /* ═══════════════════════════════════════════════════════
    CANVAS PIN HIT-TESTING
    ═══════════════════════════════════════════════════════ */
-(function() {
-  const app = document.getElementById('app');
-  if (!app) return;
+function handleCanvasTap(e) {
+  const canvas = document.getElementById('route-canvas');
+  if (!canvas || !currentRoute || revealed) return;
+  const rect = canvas.getBoundingClientRect();
+  const clientX = e.clientX !== undefined ? e.clientX : (e.changedTouches && e.changedTouches[0].clientX);
+  const clientY = e.clientY !== undefined ? e.clientY : (e.changedTouches && e.changedTouches[0].clientY);
+  if (clientX === undefined) return;
+  const x = clientX - rect.left;
+  const y = clientY - rect.top;
+  if (!lastDrawnPinPts.length) return;
 
-  function handleCanvasTap(e) {
-    const canvas = document.getElementById('route-canvas');
-    if (!canvas || !currentRoute || revealed) return;
-    const rect = canvas.getBoundingClientRect();
-    const clientX = e.clientX !== undefined ? e.clientX : (e.changedTouches && e.changedTouches[0].clientX);
-    const clientY = e.clientY !== undefined ? e.clientY : (e.changedTouches && e.changedTouches[0].clientY);
-    if (clientX === undefined) return;
-    const x = clientX - rect.left;
-    const y = clientY - rect.top;
-    if (!lastDrawnPinPts.length) return;
+  let hit = null, hitDist = Infinity;
+  const emptyHitR = (lastEmptyR || 12) + 8;
+  const filledHitR = (lastPinR || 30) + 6;
 
-    let hit = null, hitDist = Infinity;
-    const emptyHitR = (lastEmptyR || 12) + 8;
-    const filledHitR = (lastPinR || 30) + 6;
+  // Empty pins first
+  lastDrawnPinPts.forEach((p, i) => {
+    if (assignments[i]) return;
+    const d = Math.sqrt((x-p.x)**2 + (y-p.y)**2);
+    if (d < emptyHitR && d < hitDist) { hit = i; hitDist = d; }
+  });
+  // Placed pins (can override empty hits if closer)
+  lastDrawnPinPts.forEach((p, i) => {
+    if (!assignments[i]) return;
+    const d = Math.sqrt((x-p.x)**2 + (y-p.y)**2);
+    if (d < filledHitR && d < hitDist) { hit = i; hitDist = d; }
+  });
 
-    // Empty pins first
-    lastDrawnPinPts.forEach((p, i) => {
-      if (assignments[i]) return;
-      const d = Math.sqrt((x-p.x)**2 + (y-p.y)**2);
-      if (d < emptyHitR && d < hitDist) { hit = i; hitDist = d; }
-    });
-    // Placed pins (can override empty hits if closer)
-    lastDrawnPinPts.forEach((p, i) => {
-      if (!assignments[i]) return;
-      const d = Math.sqrt((x-p.x)**2 + (y-p.y)**2);
-      if (d < filledHitR && d < hitDist) { hit = i; hitDist = d; }
-    });
+  if (hit !== null) tapPin(hit);
+}
 
-    if (hit !== null) tapPin(hit);
-  }
-
-  const routeCanvas = document.getElementById('route-canvas');
-  if (routeCanvas) {
-    routeCanvas.addEventListener('click', handleCanvasTap);
-    routeCanvas.addEventListener('touchend', e => {
-      e.preventDefault();
-      handleCanvasTap(e);
-    }, { passive: false });
-  }
-})();
+let pinListenersAttached = false;
