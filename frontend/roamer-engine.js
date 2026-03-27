@@ -1228,11 +1228,7 @@ function render() {
       <div class="tap-grid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;">
         ${photoGridHTML}
       </div>
-      <div class="submit-wrap">
-        <button id="btn-submit" class="submit-btn ${filled ? "active" : "inactive"}" ${filled ? "" : "disabled"}>
-          ${filled ? `Submit Guess ${guessNum} →` : `Place all ${currentRoute.stop_count} stops to continue`}
-        </button>
-      </div>
+
     </div>`;
 
   // Layout
@@ -1260,8 +1256,33 @@ function render() {
       ${photoPanelHTML}`;
   }
 
+  // Floating submit button — inject once, update on every render
+  let floatWrap = document.getElementById('floating-submit');
+  if (!floatWrap) {
+    floatWrap = document.createElement('div');
+    floatWrap.id = 'floating-submit';
+    floatWrap.className = 'floating-submit';
+    floatWrap.innerHTML = `
+      <button class="floating-submit-btn" id="floating-submit-btn">
+        Submit Guess ${guessNum} <span class="floating-submit-arrow">→</span>
+      </button>`;
+    document.getElementById('game-overlay').appendChild(floatWrap);
+    document.getElementById('floating-submit-btn').addEventListener('click', async () => {
+      if (allSlotsFilled()) await checkAnswers();
+    });
+  } else {
+    // Update label for subsequent guesses
+    const fbtn = document.getElementById('floating-submit-btn');
+    if (fbtn) fbtn.innerHTML = `Submit Guess ${guessNum} <span class="floating-submit-arrow">→</span>`;
+  }
+  // Show/hide based on whether all slots are filled
+  if (filled && !revealed) {
+    floatWrap.classList.add('visible');
+  } else {
+    floatWrap.classList.remove('visible');
+  }
+
   // Events
-  document.getElementById("btn-submit")?.addEventListener("click", async () => { if (allSlotsFilled()) await checkAnswers(); });
   document.getElementById("btn-retry")?.addEventListener("click",  () => startGame(currentRoute, playSource));
   document.getElementById("btn-menu")?.addEventListener("click",   goBack);
   document.getElementById("btn-copy")?.addEventListener("click",   function() {
@@ -1337,6 +1358,8 @@ function closeOverlay() {
 function goBack() {
   selectedCard = null;
   if (leafletMap) { leafletMap.remove(); leafletMap = null; }
+  const floatWrap = document.getElementById('floating-submit');
+  if (floatWrap) floatWrap.classList.remove('visible');
   if (playSource === 'core') { screen = 'core'; render(); }
   else closeOverlay();
 }
