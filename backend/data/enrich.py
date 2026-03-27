@@ -407,15 +407,20 @@ def run(
             time.sleep(NOMINATIM_PAUSE)
 
         # ── Photo ──
-        print(f"  photo [{i - 1}/{total}] {location} ...", end=" ", flush=True)
-        try:
-            photo_url = fetch_photo_url(location, access_key)
-            print("ok")
-        except (ValueError, requests.RequestException) as exc:
-            print("FAILED", flush=True)
-            print(f"row {i}: photo fetch failed for {location!r}: {exc}", file=sys.stderr)
-            _write_output(output_rows, output_path)
-            return 1
+        existing_url = row.get("photo_url", "").strip()
+        if existing_url:
+            print(f"  photo [{i - 1}/{total}] {location} ... using existing URL")
+            photo_url = existing_url
+        else:
+            print(f"  photo [{i - 1}/{total}] {location} ...", end=" ", flush=True)
+            try:
+                photo_url = fetch_photo_url(location, access_key)
+                print("ok")
+            except (ValueError, requests.RequestException) as exc:
+                print("FAILED", flush=True)
+                print(f"row {i}: photo fetch failed for {location!r}: {exc}", file=sys.stderr)
+                _write_output(output_rows, output_path)
+                return 1
 
         output_rows.append({
             "route_name": route_name,
@@ -424,7 +429,7 @@ def run(
             "lat":        f"{lat:.6f}",
             "lng":        f"{lng:.6f}",
             "photo_url":  photo_url,
-            "is_decoy":   "false",
+            "is_decoy":   row.get("is_decoy", "false").strip().lower(),
         })
 
     _write_output(output_rows, output_path)
