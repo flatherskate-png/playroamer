@@ -1,26 +1,26 @@
 from fastapi import APIRouter, HTTPException, Query
 
-from app.models.game import RoutePublic, RouteReveal, GuessRequest, GuessResponse
+from app.models.game import RouteHidden, RouteRevealed, GuessRequest, GuessResponse
 from app.services.route_store import get_route_by_id, get_daily_route, get_all_routes
 from app.services.game_service import get_public_route, get_reveal, validate_guess
 
 router = APIRouter()
 
 
-@router.get("/routes/daily", response_model=RoutePublic)
+@router.get("/routes/daily", response_model=RouteHidden)
 async def daily_route():
     """Return today's route — photos shuffled, no solution data."""
     route = get_daily_route()
     return get_public_route(route)
 
 
-@router.get("/routes", response_model=list[RoutePublic])
+@router.get("/routes", response_model=list[RouteHidden])
 async def list_routes():
     """Return all available routes without solution data."""
     return [get_public_route(r) for r in get_all_routes()]
 
 
-@router.get("/routes/{route_id}", response_model=RoutePublic)
+@router.get("/routes/{route_id}", response_model=RouteHidden)
 async def get_route(route_id: str):
     """Return a specific route without solution data."""
     route = get_route_by_id(route_id)
@@ -29,7 +29,7 @@ async def get_route(route_id: str):
     return get_public_route(route)
 
 
-@router.get("/routes/{route_id}/reveal", response_model=RouteReveal)
+@router.get("/routes/{route_id}/reveal", response_model=RouteRevealed)
 async def reveal_route(route_id: str):
     """Return full solution data — call only after the game has ended."""
     route = get_route_by_id(route_id)

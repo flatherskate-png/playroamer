@@ -85,16 +85,19 @@ def _load_routes(csv_path: Path) -> list[Route]:
 
             region = row.get("region", "").strip()
             pack   = row.get("pack", "").strip()
+            blurb  = row.get("blurb", "").strip()
 
             if route_name not in route_buckets:
-                route_buckets[route_name] = {"stops": [], "decoys": [], "region": "", "pack": ""}
+                route_buckets[route_name] = {"stops": [], "decoys": [], "region": "", "pack": "", "blurb": ""}
                 route_order.append(route_name)
 
-            # Use first non-empty value seen for region/pack
+            # Use first non-empty value seen for region/pack/blurb
             if region and not route_buckets[route_name]["region"]:
                 route_buckets[route_name]["region"] = region
             if pack and not route_buckets[route_name]["pack"]:
                 route_buckets[route_name]["pack"] = pack
+            if blurb and not route_buckets[route_name]["blurb"]:
+                route_buckets[route_name]["blurb"] = blurb
 
             if is_decoy:
                 route_buckets[route_name]["decoys"].append(
@@ -117,6 +120,7 @@ def _load_routes(csv_path: Path) -> list[Route]:
             name=route_name,
             region=bucket["region"],
             pack=bucket["pack"],
+            blurb=bucket["blurb"],
             stops=ordered_stops,
             decoys=bucket["decoys"],
         ))

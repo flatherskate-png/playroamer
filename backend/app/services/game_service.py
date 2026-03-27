@@ -1,54 +1,82 @@
+import hashlib
 import random
 from app.models.game import (
-    Route, RoutePublic, RouteReveal, HiddenLocation, SlotLocation,
+    Route, RouteHidden, RouteRevealed, LocationHidden, SlotHidden,
     GuessRequest, GuessResponse, SlotFeedback,
 )
 from app.services.route_store import get_route_by_id
 
 MAX_GUESSES = 3
 
+# Stable opaque ID scheme:
+#   Each photo gets an ID derived from a SHA-256 hash of its URL.
+#   This is deterministic (server can recompute it) and opaque (reveals
+#   nothing about whether a card is a stop or a decoy).
 
-def get_public_route(route: Route) -> RoutePublic:
+
+def _photo_id(photo_url: str) -> str:
+    """Return a short, URL-safe hash of the photo URL.
+
+    INVARIANT: This function must be called identically for stops and decoys.
+    Using the same factory for both ensures IDs are opaque — the client cannot
+    infer whether a card is a stop or decoy from its ID alone.
+    """
+    digest = hashlib.sha256(photo_url.encode()).hexdigest()[:12]
+    return f"photo_{digest}"
+
+
+def get_public_route(route: Route) -> RouteHidden:
     """
     Return only what the client needs to render the puzzle.
-    Photos are shuffled (stops + decoys mixed) with no lat/lng.
+    Photos are shuffled (stops + decoys mixed) with no lat/lng or names.
     Slots expose ordered pin positions without revealing which photo goes where.
     """
-    all_photos: list[HiddenLocation] = [
-        HiddenLocation(name=s.name, photo=s.photo) for s in route.stops
+    all_photos: list[LocationHidden] = [
+        LocationHidden(id=_photo_id(s.photo), photo=s.photo) for s in route.stops
     ] + [
-        HiddenLocation(name=d.name, photo=d.photo) for d in route.decoys
+        LocationHidden(id=_photo_id(d.photo), photo=d.photo) for d in route.decoys
     ]
-    random.shuffle(all_photos)
-    return RoutePublic(
+    seed = int(hashlib.sha256(route.id.encode()).hexdigest(), 16) % (2**32)
+    random.Random(seed).shuffle(all_photos)
+    return RouteHidden(
         id=route.id,
         name=route.name,
         region=route.region,
         pack=route.pack,
         stop_count=len(route.stops),
         decoy_count=len(route.decoys),
-        slots=[SlotLocation(lat=s.lat, lng=s.lng) for s in route.stops],
+        slots=[SlotHidden(lat=s.lat, lng=s.lng) for s in route.stops],
         photos=all_photos,
     )
 
 
-def get_reveal(route: Route) -> RouteReveal:
+def get_reveal(route: Route) -> RouteRevealed:
     """Return full solution data — only call after the game has ended."""
-    return RouteReveal(
+    return RouteRevealed(
         stops=route.stops,
         decoy_names=[d.name for d in route.decoys],
+        blurb=route.blurb,
     )
 
 
 def validate_guess(request: GuessRequest, guess_number: int) -> GuessResponse:
     """
-    Server-side answer validation. The client never sees stop order or coords.
+    Server-side answer validation. The client submits opaque photo IDs;
+    the server resolves them to location names internally.
     """
     route = get_route_by_id(request.route_id)
     if not route:
         raise ValueError(f"Route {request.route_id} not found")
 
-    assignment_map = {item.slot_index: item.photo_name for item in request.assignments}
+    # Rebuild lookup: opaque hash-based id → location name
+    # Recomputing _photo_id from route data is deterministic and stateless.
+    id_to_name = {_photo_id(s.photo): s.name for s in route.stops}
+    id_to_name.update({_photo_id(d.photo): d.name for d in route.decoys})
+
+    # Build a set of all real stop names for yellow detection
+    stop_names = {s.name for s in route.stops}
+
+    assignment_map = {item.slot_index: id_to_name.get(item.photo_id) for item in request.assignments}
     feedback: list[SlotFeedback] = []
     correct_count = 0
 
@@ -58,12 +86,12 @@ def validate_guess(request: GuessRequest, guess_number: int) -> GuessResponse:
             continue
 
         if placed_name == stop.name:
-            result = "green"
+            result = "correct"
             correct_count += 1
-        elif any(s.name == placed_name for s in route.stops):
-            result = "yellow"  # real location, wrong position
+        elif placed_name in stop_names:
+            result = "wrong_slot"
         else:
-            result = "red"     # decoy
+            result = "decoy"
 
         feedback.append(SlotFeedback(slot_index=i, result=result))
 

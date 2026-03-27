@@ -19,23 +19,24 @@ class Route(BaseModel):
     name: str
     region: str = ""
     pack: str = ""
+    blurb: str = ""
     stops: List[Location]
     decoys: List[Decoy]
 
 
-class HiddenLocation(BaseModel):
-    """A location as the client sees it — name and photo only, no coordinates or position."""
-    name: str
+class LocationHidden(BaseModel):
+    """A location as the client sees it — opaque id and photo only, no name or coordinates."""
+    id: str   # stable opaque key: "photo_<sha256[:12]>" of the photo URL
     photo: str
 
 
-class SlotLocation(BaseModel):
+class SlotHidden(BaseModel):
     """Geographic position of a route slot — no name, no photo."""
     lat: float
     lng: float
 
 
-class RoutePublic(BaseModel):
+class RouteHidden(BaseModel):
     """Route data safe to send to the client during gameplay.
 
     Photos are shuffled (stops + decoys mixed) with no lat/lng.
@@ -48,19 +49,20 @@ class RoutePublic(BaseModel):
     pack: str
     stop_count: int
     decoy_count: int
-    slots: List[SlotLocation]
-    photos: List[HiddenLocation]
+    slots: List[SlotHidden]
+    photos: List[LocationHidden]
 
 
-class RouteReveal(BaseModel):
+class RouteRevealed(BaseModel):
     """Full solution data — only sent after game ends."""
     stops: List[Location]
     decoy_names: List[str]
+    blurb: str = ""
 
 
 class GuessItem(BaseModel):
     slot_index: int
-    photo_name: str
+    photo_id: str   # opaque id from LocationHidden.id
 
 
 class GuessRequest(BaseModel):
@@ -70,7 +72,7 @@ class GuessRequest(BaseModel):
 
 class SlotFeedback(BaseModel):
     slot_index: int
-    result: str  # "green" | "yellow" | "red"
+    result: str  # "correct" | "wrong_slot" | "decoy"
 
 
 class GuessResponse(BaseModel):
