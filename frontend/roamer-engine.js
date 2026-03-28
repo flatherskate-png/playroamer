@@ -42,6 +42,10 @@ let worldTopo50Loading = false;
 // selected photo card (held in hand)
 let selectedCard = null;
 
+// ── Mobile tray state ──
+let mobileFeaturedName = null;   // card.id of featured photo in mobile tray
+let userFlaggedDecoys  = new Set(); // card.ids user suspects are decoys (orange state)
+
 // Landscape layout detection
 let isLandscape = false;
 let resizeObserver = null;
@@ -58,7 +62,8 @@ function attachResizeObserver() {
   if (!overlay || typeof ResizeObserver === 'undefined') return;
   resizeObserver = new ResizeObserver(() => {
     const nowLandscape = checkLandscape();
-    if (nowLandscape !== isLandscape && screen === 'play') {
+    const nowMobile = (document.getElementById('game-overlay')?.offsetWidth ?? window.innerWidth) <= 768;
+    if ((nowLandscape !== isLandscape || nowMobile !== isMobile()) && screen === 'play') {
       isLandscape = nowLandscape;
       render();
     }
@@ -70,6 +75,14 @@ const MAX_GUESSES = 3;
 let guessesRemaining = MAX_GUESSES;
 let guessHistory     = [];
 let lastFeedback     = {};
+
+// ── Persistent per-stop flags (reactions, etc.) stored in localStorage ──
+function loadStopFlags() {
+  try { return JSON.parse(localStorage.getItem('roamer_stop_flags') || '{}'); } catch { return {}; }
+}
+function saveStopFlags(flags) {
+  try { localStorage.setItem('roamer_stop_flags', JSON.stringify(flags)); } catch {}
+}
 
 function shuffle(arr) {
   const a = [...arr];
@@ -88,6 +101,8 @@ function startGame(r, source) {
   cards            = shuffle([...r.photos]);
   assignments      = {};
   selectedCard     = null;
+  mobileFeaturedName = null;
+  userFlaggedDecoys  = new Set();
   revealed         = false;
   revealData       = null;
   score            = null;
@@ -107,6 +122,48 @@ function startGame(r, source) {
   attachResizeObserver();
   render();
 }
+
+function isMobile() {
+  const overlay = document.getElementById('game-overlay');
+  return overlay ? overlay.offsetWidth <= 768 : window.innerWidth <= 768;
+}
+
+// After placing a card, advance mobileFeaturedName to the next unplaced/non-eliminated card
+function advanceMobileFeatured(placedId) {
+  const idx = cards.findIndex(c => c.id === placedId);
+  if (idx === -1) return;
+  const n = cards.length;
+  for (let i = 1; i <= n; i++) {
+    const c = cards[(idx + i) % n];
+    const isPlaced = Object.values(assignments).some(a => a.id === c.id);
+    const isElim   = confirmedDecoyIdsGlobal.has(c.id);
+    if (!isPlaced && !isElim) { mobileFeaturedName = c.id; return; }
+  }
+  // All placed/eliminated — stay on current
+  mobileFeaturedName = placedId;
+}
+
+// Resolve which card should be shown in the featured slot
+function resolveMobileFeatured() {
+  if (!cards.length) return null;
+  // 1. Armed card
+  if (selectedCard) return selectedCard;
+  // 2. Explicit user choice
+  if (mobileFeaturedName) {
+    const c = cards.find(c => c.id === mobileFeaturedName);
+    if (c) return c;
+  }
+  // 3. First unplaced, non-eliminated
+  const unplaced = cards.find(c => {
+    const isPlaced = Object.values(assignments).some(a => a.id === c.id);
+    const isElim   = confirmedDecoyIdsGlobal.has(c.id);
+    return !isPlaced && !isElim;
+  });
+  if (unplaced) return unplaced;
+  // 4. Fallback
+  return cards[0];
+}
+
 
 function slotIsLocked(i) {
   if (guessHistory.length === 0) return false;
@@ -131,6 +188,7 @@ function tapPhoto(card) {
   } else {
     selectedCard = card;
   }
+  mobileFeaturedName = card.id;
   render();
   redrawGeoMap();
 }
@@ -141,8 +199,10 @@ function tapPin(slotIndex) {
   if (slotIsLocked(slotIndex)) return;
 
   if (selectedCard) {
+    const placedId = selectedCard.id;
     assignments[slotIndex] = selectedCard;
     selectedCard = null;
+    advanceMobileFeatured(placedId);
   } else {
     if (assignments[slotIndex]) {
       if (slotIsLocked(slotIndex)) return;
@@ -1310,14 +1370,114 @@ function render() {
        </div>
      </div>`;
 
-  // Photo panel
+  // Desktop photo panel (3-col grid)
   const photoPanelHTML = `
     <div class="panel panel-padded photo-panel" id="photo-panel">
-      <div class="tap-grid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;">
+      <div class="tap-grid tap-grid-desktop" style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;">
         ${photoGridHTML}
       </div>
-
     </div>`;
+
+  // ── Mobile tray ──
+  const mobileFeaturedCard = resolveMobileFeatured();
+  const mobileTrayHTML = (() => {
+    if (!mobileFeaturedCard) return '';
+    const fc = mobileFeaturedCard;
+    const fcIsElim    = confirmedDecoyIds.has(fc.id);
+    const fcIsUserDecoy = userFlaggedDecoys.has(fc.id);
+    const fcPlacedEntry = Object.entries(assignments).find(([, a]) => a.id === fc.id);
+    const fcSlotIdx   = fcPlacedEntry ? parseInt(fcPlacedEntry[0]) : -1;
+    const fcIsPlaced  = fcSlotIdx !== -1;
+    const fcLocked    = fcIsPlaced && slotIsLocked(fcSlotIdx);
+    const fcIsSelected = selectedCard?.id === fc.id;
+
+    // Featured border + overlay
+    let featBorder, featOverlayHTML = '', featHint = '';
+    if (fcLocked) {
+      featBorder = '#4ade80';
+      featOverlayHTML = `<div class="mt-feat-overlay mt-feat-locked">
+        <div class="mt-feat-badge mt-badge-locked">✓ Locked in at stop ${fcSlotIdx + 1}</div>
+      </div>`;
+    } else if (fcIsElim) {
+      featBorder = '#f87171';
+      featOverlayHTML = `<div class="mt-feat-overlay mt-feat-elim">
+        <div class="mt-feat-badge mt-badge-elim">✗ Decoy eliminated</div>
+      </div>`;
+    } else if (fcIsUserDecoy) {
+      featBorder = '#fb923c';
+      featOverlayHTML = `<div class="mt-feat-overlay mt-feat-userdecoy">
+        <div class="mt-feat-badge mt-badge-userdecoy">DECOY?</div>
+        <button class="mt-unflag-btn" data-unflag="${fc.id}">✕ unflag</button>
+      </div>`;
+    } else if (fcIsPlaced) {
+      featBorder = 'rgba(125,211,252,0.5)';
+      featOverlayHTML = `<div class="mt-feat-overlay mt-feat-placed">
+        <div class="mt-feat-badge mt-badge-placed">placed at stop ${fcSlotIdx + 1}</div>
+      </div>`;
+    } else if (fcIsSelected) {
+      featBorder = 'var(--cyan)';
+      featHint = `<div class="mt-feat-hint">tap a pin on the map →</div>`;
+      featOverlayHTML = `<div class="mt-feat-overlay mt-feat-selected"></div>`;
+    } else {
+      featBorder = 'var(--border)';
+    }
+
+    // Decoy flag button — shown when not locked, not already flagged, not eliminated
+    const decoyBtnHTML = (!fcLocked && !fcIsElim && !fcIsUserDecoy && !fcIsPlaced)
+      ? `<button class="mt-decoy-btn" data-decoy-flag="${fc.id}">decoy?</button>` : '';
+
+    // Expand button
+    const featIdx = cards.indexOf(fc);
+    const expandBtn = `<button class="mt-expand-btn" onclick="event.stopPropagation();openLightbox(${featIdx})" aria-label="Expand">
+      <svg width="11" height="11" viewBox="0 0 11 11" fill="none"><path d="M1 4V1h3M7 1h3v3M10 7v3H7M4 10H1V7" stroke="rgba(240,239,245,0.7)" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>`;
+
+    // Thumbnail strip
+    const thumbsHTML = cards.map((c, i) => {
+      const tIsElim     = confirmedDecoyIds.has(c.id);
+      const tIsUserDecoy = userFlaggedDecoys.has(c.id);
+      const tPlaced     = Object.entries(assignments).find(([, a]) => a.id === c.id);
+      const tSlotIdx    = tPlaced ? parseInt(tPlaced[0]) : -1;
+      const tIsPlaced   = tSlotIdx !== -1;
+      const tLocked     = tIsPlaced && slotIsLocked(tSlotIdx);
+      const tIsSelected = selectedCard?.id === c.id;
+      const tIsFeatured = c.id === fc.id;
+
+      let cls = 'mt-thumb';
+      if (tIsFeatured)  cls += ' mt-active';
+      if (tIsSelected)  cls += ' mt-selected';
+      if (tLocked)      cls += ' mt-locked';
+      else if (tIsPlaced) cls += ' mt-picked';
+      if (tIsElim)      cls += ' mt-elim';
+      else if (tIsUserDecoy) cls += ' mt-user-decoy';
+
+      let dotBadge = '';
+      if (tLocked)       dotBadge = `<div class="mt-dot-badge mt-dot-locked">✓</div>`;
+      else if (tIsPlaced) dotBadge = `<div class="mt-dot-badge mt-dot-placed">↑</div>`;
+      else if (tIsElim)  dotBadge = `<div class="mt-dot-badge mt-dot-elim">✗</div>`;
+
+      return `<div class="${cls}" data-mt-thumb="${c.id}" data-mt-idx="${i}">
+        <img src="${c.photo}" alt="" draggable="false"/>
+        ${dotBadge}
+      </div>`;
+    }).join('');
+
+    return `<div class="mt-tray panel" id="mt-tray">
+      <div class="mt-featured-wrap" id="mt-featured-wrap">
+        <div class="mt-featured tap-card" data-id="${fc.id}"
+             style="border-color:${featBorder};${fcIsSelected ? 'box-shadow:0 0 20px rgba(125,211,252,0.35);' : ''}">
+          <img src="${fc.photo}" alt="" draggable="false"/>
+          ${featOverlayHTML}
+          ${featHint}
+          ${decoyBtnHTML}
+          ${expandBtn}
+        </div>
+      </div>
+      <div class="mt-strip" id="mt-strip">
+        ${thumbsHTML}
+      </div>
+    </div>`;
+  })();
 
   // Layout
   if (revealed) {
@@ -1335,6 +1495,13 @@ function render() {
           ${photoPanelHTML}
         </div>
       </div>`;
+  } else if (isMobile()) {
+    app.innerHTML = `
+      ${historyHTML}
+      <div class="map-panel" id="map-panel">
+        ${mapContentHTML}
+      </div>
+      ${mobileTrayHTML}`;
   } else {
     app.innerHTML = `
       ${historyHTML}
@@ -1404,8 +1571,85 @@ function render() {
     if (!card) return;
     el.addEventListener("click", e => {
       if (e.target.closest('.expand-btn')) return;
+      if (e.target.closest('.mt-decoy-btn')) return;
+      if (e.target.closest('.mt-unflag-btn')) return;
       tapPhoto(card);
     });
+  });
+
+  // ── Mobile tray events ──
+  // Thumbnail taps
+  document.querySelectorAll('.mt-thumb').forEach(el => {
+    el.addEventListener('click', () => {
+      const id = el.dataset.mtThumb;
+      const card = cards.find(c => c.id === id);
+      if (!card) return;
+      mobileFeaturedName = id;
+      const isElim = confirmedDecoyIdsGlobal.has(id);
+      const placedEntry = Object.entries(assignments).find(([, a]) => a.id === id);
+      const isLocked = placedEntry && slotIsLocked(parseInt(placedEntry[0]));
+      if (!isElim && !isLocked) tapPhoto(card);
+      else { render(); }
+    });
+  });
+
+  // Decoy flag button
+  document.querySelectorAll('.mt-decoy-btn').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const id = btn.dataset.decoyFlag;
+      userFlaggedDecoys.add(id);
+      // If it was selected, deselect it
+      if (selectedCard?.id === id) { selectedCard = null; redrawGeoMap(); }
+      render();
+    });
+  });
+
+  // Unflag button
+  document.querySelectorAll('.mt-unflag-btn').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const id = btn.dataset.unflag;
+      userFlaggedDecoys.delete(id);
+      render();
+    });
+  });
+
+  // Swipe on featured photo
+  (function() {
+    const wrap = document.getElementById('mt-featured-wrap');
+    if (!wrap) return;
+    let sx = 0, sy = 0;
+    wrap.addEventListener('touchstart', e => {
+      sx = e.touches[0].clientX;
+      sy = e.touches[0].clientY;
+    }, { passive: true });
+    wrap.addEventListener('touchend', e => {
+      const dx = e.changedTouches[0].clientX - sx;
+      const dy = e.changedTouches[0].clientY - sy;
+      if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 36) {
+        const dir = dx < 0 ? 1 : -1;
+        const curIdx = cards.findIndex(c => c.id === (mobileFeaturedCard?.id));
+        const next = (curIdx + dir + cards.length) % cards.length;
+        mobileFeaturedName = cards[next].id;
+        // Swiping = browsing: deselect armed card
+        selectedCard = null;
+        render();
+        redrawGeoMap();
+      }
+    }, { passive: true });
+  })();
+
+  // Scroll active thumbnail into view
+  requestAnimationFrame(() => {
+    const strip = document.getElementById('mt-strip');
+    const activeThumb = strip?.querySelector('.mt-active');
+    if (activeThumb && strip) {
+      const stripRect = strip.getBoundingClientRect();
+      const thumbRect = activeThumb.getBoundingClientRect();
+      const thumbCenter = thumbRect.left + thumbRect.width / 2 - stripRect.left + strip.scrollLeft;
+      strip.scrollTo({ left: thumbCenter - strip.offsetWidth / 2, behavior: 'smooth' });
+    }
   });
 
   // ── Reattach persistent canvas to the slot ──
