@@ -356,13 +356,72 @@ body {
 }
 
 .nav-brand { display: flex; align-items: center; gap: 9px; cursor: pointer; flex-shrink: 0; }
-.nav-wordmark { font-family: 'Playfair Display', serif; font-size: 1.1rem; font-weight: 500; letter-spacing: 0.04em; }
+.nav-wordmark { font-family: 'Playfair Display', serif; font-size: 1.1rem; font-weight: 500; letter-spacing: 0.04em; flex-shrink: 0; }
 
 .nav-right {
   display: flex; align-items: center; gap: 10px; flex: 1; justify-content: flex-end;
 }
 
-/* Route info injected into nav during play */
+/* Route info next to logo during play */
+.nav-sub-line {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  padding: 0 0 8px;
+  font-size: 0.7rem;
+  color: var(--text-2);
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 10px;
+}
+
+.nav-divider {
+  width: 1px;
+  height: 28px;
+  background: var(--border);
+  flex-shrink: 0;
+  margin: 0 4px;
+}
+
+.nav-route-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  align-items: flex-end;
+}
+
+.nav-route-name {
+  font-family: 'Playfair Display', serif;
+  font-size: 1.25rem;
+  font-weight: 400;
+  color: var(--text-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  letter-spacing: 0.02em;
+  line-height: 1.2;
+}
+
+.nav-route-sub {
+  font-size: 0.62rem;
+  color: var(--text-3);
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.nav-pips {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+}
+
+/* Keep old nav-play-meta for any fallback */
 .nav-play-meta {
   display: flex;
   flex-direction: column;
@@ -837,6 +896,47 @@ body {
 
 
 /* ═══════════════════════════════════════════════════════
+   DESKTOP TWO-COLUMN LAYOUT (≥769px, non-landscape)
+   ═══════════════════════════════════════════════════════ */
+
+.play-desktop-row {
+  display: grid;
+  grid-template-columns: 1fr 1.2fr;
+  gap: 14px;
+  align-items: flex-start;
+  width: 100%;
+}
+
+@media (min-width: 960px) {
+  .play-desktop-row {
+    grid-template-columns: 1fr 1.1fr;
+    gap: 20px;
+  }
+}
+
+@media (min-width: 1100px) {
+  .play-desktop-row {
+    grid-template-columns: 1fr 1.2fr;
+    gap: 24px;
+  }
+}
+
+/* Sticky map column */
+.play-desktop-map {
+  position: sticky;
+  top: 12px;
+}
+
+.play-desktop-map .map-panel {
+  margin-bottom: 0;
+}
+
+/* Desktop cards: 16/9 aspect ratio */
+.tap-grid-desktop .tap-card {
+  aspect-ratio: 16 / 9 !important;
+}
+
+/* ═══════════════════════════════════════════════════════
    LANDSCAPE SIDE-BY-SIDE LAYOUT
    ═══════════════════════════════════════════════════════ */
 
@@ -877,6 +977,14 @@ body {
   grid-template-columns: repeat(3, 1fr) !important;
 }
 
+
+/* Desktop: guess history sits below the two-column grid, full width */
+@media (min-width: 769px) {
+  .guess-history-panel {
+    margin-top: 8px;
+    margin-bottom: 8px;
+  }
+}
 
 /* ═══════════════════════════════════════════════════════
    GUESS HISTORY — compact horizontal strips

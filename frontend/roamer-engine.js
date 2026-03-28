@@ -5,6 +5,7 @@
    ═══════════════════════════════════════════════════════ */
 
 // ── API ──
+// TODO: replace with deployed Railway URL (e.g. https://roamer-backend-production.up.railway.app)
 const API_BASE = 'http://localhost:8000';
 
 // ── Feedback result mapping (semantic API values → display) ──
@@ -1015,7 +1016,8 @@ function render() {
 
   // ── Nav: merged into single bar during play ──
   if (screen === "play") {
-    const pipsHTML = `<div class="guesses-pip">${Array.from({length:MAX_GUESSES},(_,i)=>{
+    const guessNum = guessHistory.length + 1;
+    const pipsHTML = Array.from({length:MAX_GUESSES},(_,i)=>{
       let cls = "pip";
       if (i < guessHistory.length) {
         const gh = guessHistory[i];
@@ -1023,21 +1025,42 @@ function render() {
         cls += c === currentRoute.stop_count ? " correct" : " used";
       }
       return `<div class="${cls}"></div>`;
-    }).join("")}</div>`;
+    }).join("");
+
+    const navBrand = document.querySelector('.nav-brand');
+    if (navBrand) {
+      navBrand.querySelectorAll('.nav-divider, .nav-route-name').forEach(el => el.remove());
+      const divider = document.createElement('div');
+      divider.className = 'nav-divider';
+      const routeName = document.createElement('span');
+      routeName.className = 'nav-route-name';
+      routeName.textContent = currentRoute.name;
+      navBrand.appendChild(divider);
+      navBrand.appendChild(routeName);
+    }
+
     navRight.innerHTML = `
-      <div class="nav-play-meta">
-        <span class="nav-play-title">${currentRoute.name}</span>
-        <span class="nav-play-sub">${currentRoute.region} · ${currentRoute.stop_count} stops · ${currentRoute.decoy_count} decoys</span>
-      </div>
-      ${pipsHTML}
       <button class="btn-ghost" id="nav-back">← Back</button>
     `;
     navRight.querySelector('#nav-back').addEventListener('click', goBack);
+
+    // Sub-line as its own row below the nav
+    let subLine = document.getElementById('nav-sub-line');
+    if (!subLine) {
+      subLine = document.createElement('div');
+      subLine.id = 'nav-sub-line';
+      navEl.parentNode.insertBefore(subLine, navEl.nextSibling);
+    }
+    subLine.className = 'nav-sub-line';
+    subLine.innerHTML = `${currentRoute.region} · ${currentRoute.stop_count} stops · ${currentRoute.decoy_count} decoys · Guess ${guessNum} of ${MAX_GUESSES} <span class="nav-pips">${pipsHTML}</span>`;
+
     if (navEl) navEl.classList.add('nav-play-mode');
   } else if (screen === "home") {
     navRight.innerHTML = `<button class="btn-ghost" id="nav-core">Grand Adventures</button>`;
     navRight.querySelector('#nav-core').addEventListener('click', () => { screen='core'; render(); });
     if (navEl) navEl.classList.remove('nav-play-mode');
+    document.querySelectorAll('.nav-brand .nav-divider, .nav-brand .nav-route-name').forEach(el => el.remove());
+    document.getElementById('nav-sub-line')?.remove();
   } else if (screen === "core") {
     navRight.innerHTML = `<button class="btn-ghost" id="nav-home">← Home</button>`;
     navRight.querySelector('#nav-home').addEventListener('click', () => closeOverlay());
@@ -1188,7 +1211,7 @@ function render() {
       : '';
 
     return `<div class="tap-card" data-id="${c.id}"
-      style="position:relative;aspect-ratio:1/1;border-radius:14px;overflow:visible;
+      style="position:relative;border-radius:14px;overflow:visible;
              opacity:${opacity};cursor:${cursor};${scale}transition:transform 0.15s,opacity 0.2s;">
       <div style="position:absolute;inset:0;border-radius:14px;overflow:hidden;z-index:1;
                   border:2px solid ${borderCol};transition:border-color 0.15s;
@@ -1484,7 +1507,6 @@ function render() {
     app.innerHTML = completionHTML;
   } else if (isLandscape) {
     app.innerHTML = `
-      ${historyHTML}
       <div class="play-landscape-row">
         <div class="play-col-map">
           <div class="map-panel landscape-map-panel" id="map-panel">
@@ -1493,6 +1515,7 @@ function render() {
         </div>
         <div class="play-col-photos">
           ${photoPanelHTML}
+          ${historyHTML}
         </div>
       </div>`;
   } else if (isMobile()) {
@@ -1504,11 +1527,17 @@ function render() {
       ${mobileTrayHTML}`;
   } else {
     app.innerHTML = `
-      ${historyHTML}
-      <div class="map-panel" id="map-panel">
-        ${mapContentHTML}
-      </div>
-      ${photoPanelHTML}`;
+      <div class="play-desktop-row">
+        <div class="play-desktop-map">
+          <div class="map-panel" id="map-panel">
+            ${mapContentHTML}
+          </div>
+        </div>
+        <div>
+          ${photoPanelHTML}
+          ${historyHTML}
+        </div>
+      </div>`;
   }
 
   // Floating submit button — inject once, update on every render
