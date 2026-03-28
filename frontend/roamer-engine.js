@@ -33,6 +33,12 @@ let playSource   = "home";
 let lightboxIndex = null;
 let confirmedDecoyIdsGlobal = new Set();
 
+// ── World topo cache (D3 land rendering) ──
+let worldTopoCache    = null;   // 110m — used during crossfade animation
+let worldTopo50Cache  = null;   // 50m  — used for final flat map
+let worldTopoLoading  = false;
+let worldTopo50Loading = false;
+
 // selected photo card (held in hand)
 let selectedCard = null;
 
@@ -92,6 +98,10 @@ function startGame(r, source) {
   // Clear pin image cache for new route
   Object.keys(pinImageCache).forEach(k => delete pinImageCache[k]);
   if (leafletMap)  { leafletMap.remove(); leafletMap = null; }
+  window._persistCanvas = null;
+  geoT = 0;
+  geoAnimating = false;
+  if (geoAnimHandle) { cancelAnimationFrame(geoAnimHandle); geoAnimHandle = null; }
   screen = "play";
   isLandscape = checkLandscape();
   attachResizeObserver();
@@ -499,6 +509,7 @@ function drawGeoMap(t, rotDeg) {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
   const vp = getRouteViewport(currentRoute);
+  const cosLat = Math.cos(vp.centerLat * Math.PI / 180);
   const cx = W * 0.5, cy = H * 0.48;
   const R  = Math.min(W, H) * (0.42 - t * 0.15);
 
@@ -506,7 +517,7 @@ function drawGeoMap(t, rotDeg) {
   ctx.fillRect(0, 0, W, H);
 
   if (t < 0.95) {
-    const gA = Math.max(0, 1 - t * 1.6);
+    const gA = Math.max(0, 1 - t * 2.2);
     const grd = ctx.createRadialGradient(cx, cy, R * 0.3, cx, cy, R);
     grd.addColorStop(0, `rgba(12,28,56,${gA * 0.9})`);
     grd.addColorStop(1, `rgba(7,16,31,${gA})`);
@@ -524,29 +535,77 @@ function drawGeoMap(t, rotDeg) {
     ctx.fillStyle = fg; ctx.fillRect(0, 0, W, H);
   }
 
-  // For wrapping routes, draw land rings shifted by +360 as well
-  const ringShifts = [0];
-  if (vp.wrapping && t > 0.3) {
-    if (vp.maxLng > 180) ringShifts.push(360);
-    if (vp.minLng < -180) ringShifts.push(-360);
-  }
-  ringShifts.forEach(shiftLng => {
-    GEO_RINGS.forEach(ring => {
-      if (ring.length < 3) return;
-      ctx.beginPath();
-      let started = false;
-      ring.forEach(([lng, lat]) => {
-        const p = lerpProject(lat, lng + shiftLng, t, rotDeg, vp, W, H, cx, cy, R);
-        if (p.alpha < 0.01) { started = false; return; }
-        if (!started) { ctx.moveTo(p.x, p.y); started = true; }
-        else ctx.lineTo(p.x, p.y);
+  // ── Land polygons: GEO_RINGS fades out, D3 topo fades in ──
+  const globeLandAlpha = t < 0.6 ? 1 : Math.max(0, 1 - (t - 0.6) / 0.4);
+  if (globeLandAlpha > 0.01) {
+    ctx.save();
+    ctx.globalAlpha = globeLandAlpha;
+    const ringShifts = [0];
+    if (vp.wrapping && t > 0.3) {
+      if (vp.maxLng > 180) ringShifts.push(360);
+      if (vp.minLng < -180) ringShifts.push(-360);
+    }
+    ringShifts.forEach(shiftLng => {
+      GEO_RINGS.forEach(ring => {
+        if (ring.length < 3) return;
+        ctx.beginPath();
+        let started = false;
+        ring.forEach(([lng, lat]) => {
+          const p = lerpProject(lat, lng + shiftLng, t, rotDeg, vp, W, H, cx, cy, R);
+          if (p.alpha < 0.01) { started = false; return; }
+          if (!started) { ctx.moveTo(p.x, p.y); started = true; }
+          else ctx.lineTo(p.x, p.y);
+        });
+        if (started) ctx.closePath();
+        const lA = t < 0.5 ? 0.75 : 0.75 + (t - 0.5) * 0.5;
+        ctx.fillStyle   = `rgba(32,54,88,${lA})`; ctx.fill();
+        ctx.strokeStyle = `rgba(125,211,252,${0.08 + t * 0.08})`; ctx.lineWidth = t < 0.5 ? 0.5 : 0.7; ctx.stroke();
       });
-      if (started) ctx.closePath();
-      const lA = t < 0.5 ? 0.75 : 0.75 + (t - 0.5) * 0.5;
-      ctx.fillStyle   = `rgba(18,32,56,${lA})`; ctx.fill();
-      ctx.strokeStyle = `rgba(125,211,252,${0.08 + t * 0.08})`; ctx.lineWidth = t < 0.5 ? 0.5 : 0.7; ctx.stroke();
     });
-  });
+    ctx.restore();
+  }
+
+  // D3 flat map layer — fades in as t approaches 1
+  const d3Alpha = t < 0.6 ? 0 : Math.min(1, (t - 0.6) / 0.4);
+  const activeTopoCache = (worldTopo50Cache && d3Alpha > 0.8) ? worldTopo50Cache : worldTopoCache;
+  if (d3Alpha > 0.01 && activeTopoCache && typeof d3 !== 'undefined' && typeof topojson !== 'undefined') {
+    ctx.save();
+    ctx.globalAlpha = d3Alpha;
+    const landFeature = topojson.feature(activeTopoCache, activeTopoCache.objects.land);
+    const vp2 = getRouteViewport(currentRoute);
+    const mapScale2 = Math.min(H / (vp2.maxLat - vp2.minLat), W / (vp2.maxLng - vp2.minLng)) * 0.88;
+    const offX2 = W / 2 - vp2.centerLng * mapScale2;
+    const offY2 = H / 2 + vp2.centerLat * mapScale2;
+    const shifts = [0];
+    if (vp2.wrapping) {
+      if (vp2.maxLng > 180) shifts.push(360);
+      if (vp2.minLng < -180) shifts.push(-360);
+    }
+    shifts.forEach(shiftLng => {
+      const projection = d3.geoEquirectangular()
+        .scale(mapScale2 * (180 / Math.PI))
+        .translate([offX2 + shiftLng * mapScale2, offY2])
+        .precision(0.1);
+      const pathGen = d3.geoPath().projection(projection).context(ctx);
+      ctx.beginPath();
+      pathGen(landFeature);
+      ctx.fillStyle = 'rgba(32,54,88,1)';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(125,211,252,0.35)';
+      ctx.lineWidth = 0.7;
+      ctx.stroke();
+    });
+    ctx.restore();
+  } else if (d3Alpha > 0.5 && !worldTopoCache) {
+    ctx.save();
+    ctx.globalAlpha = d3Alpha * 0.3;
+    ctx.font = `11px 'DM Sans', sans-serif`;
+    ctx.fillStyle = 'rgba(125,211,252,1)';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('loading map…', W/2, H/2);
+    ctx.restore();
+  }
 
   if (t < 0.7) {
     const gA = Math.max(0, (0.7 - t) / 0.7) * 0.06;
@@ -775,13 +834,41 @@ function drawGeoMap(t, rotDeg) {
   }
 }
 
+function loadWorldTopo() {
+  // Load 110m first (fast, ~60KB) for the animation crossfade
+  if (!worldTopoCache && !worldTopoLoading) {
+    worldTopoLoading = true;
+    fetch('https://cdn.jsdelivr.net/npm/world-atlas@2/land-110m.json')
+      .then(r => r.json())
+      .then(topo => {
+        worldTopoCache = topo;
+        worldTopoLoading = false;
+        if (geoT === 1 && !geoAnimating) redrawGeoMap();
+      })
+      .catch(() => { worldTopoLoading = false; });
+  }
+  // Load 50m in parallel (~200KB) for the crisp final map
+  if (!worldTopo50Cache && !worldTopo50Loading) {
+    worldTopo50Loading = true;
+    fetch('https://cdn.jsdelivr.net/npm/world-atlas@2/land-50m.json')
+      .then(r => r.json())
+      .then(topo => {
+        worldTopo50Cache = topo;
+        worldTopo50Loading = false;
+        if (geoT === 1 && !geoAnimating) redrawGeoMap();
+      })
+      .catch(() => { worldTopo50Loading = false; });
+  }
+}
+
 function startGeoAnimation() {
   if (geoAnimHandle) cancelAnimationFrame(geoAnimHandle);
   geoAnimating = true;
   geoT = 0;
+  loadWorldTopo(); // kick off fetch early — gives ~2s to arrive before animation ends
   const vp = getRouteViewport(currentRoute);
   geoRot = -vp.centerLng;
-  const SPIN_DURATION = 800, ZOOM_DURATION = 1400, TOTAL = SPIN_DURATION + ZOOM_DURATION;
+  const SPIN_DURATION = 700, ZOOM_DURATION = 1800, TOTAL = SPIN_DURATION + ZOOM_DURATION;
   let startTime = null;
   function frame(ts) {
     if (!startTime) startTime = ts;
@@ -800,6 +887,7 @@ function startGeoAnimation() {
       geoAnimHandle = requestAnimationFrame(frame);
     } else {
       geoT = 1; geoAnimating = false;
+      loadWorldTopo();
       drawGeoMap(1, 0);
     }
   }
@@ -1218,7 +1306,7 @@ function render() {
   // Map panel — play mode only (completion has its own map inside completionHTML)
   const mapContentHTML = `<div style="padding:6px">
        <div id="map-canvas-wrapper" style="position:relative;width:100%;">
-         <canvas id="route-canvas" style="width:100%;height:auto;display:block;border-radius:10px;"></canvas>
+         <div id="route-canvas-slot" style="padding:0 10px 8px;position:relative;"></div>
        </div>
      </div>`;
 
@@ -1320,6 +1408,20 @@ function render() {
     });
   });
 
+  // ── Reattach persistent canvas to the slot ──
+  if (!revealed) {
+    const slot = document.getElementById('route-canvas-slot');
+    if (slot) {
+      if (!window._persistCanvas) {
+        const c = document.createElement('canvas');
+        c.id = 'route-canvas';
+        c.style.cssText = 'width:100%;aspect-ratio:1;height:auto;display:block;border-radius:10px;';
+        window._persistCanvas = c;
+      }
+      slot.appendChild(window._persistCanvas);
+    }
+  }
+
   if (!revealed) {
     const canvas = document.getElementById('route-canvas');
     if (canvas) {
@@ -1329,7 +1431,7 @@ function render() {
       canvas.addEventListener('touchend', handleCanvasTap, { passive: false });
     }
     if (geoT === 0 && !geoAnimating) {
-      startGeoAnimation();
+      setTimeout(() => startGeoAnimation(), 50);
     } else if (!geoAnimating) {
       redrawGeoMap();
     }
