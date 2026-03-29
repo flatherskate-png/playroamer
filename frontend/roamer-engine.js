@@ -48,8 +48,9 @@ let mobileFeaturedName = null;   // card.id of featured photo in mobile tray
 let userFlaggedDecoys  = new Set(); // card.ids user suspects are decoys (orange state)
 
 // ── Grid order (v16) ──
-// Stable display order for the photo grid. Initialized to shuffle order;
-// reordered after each guess to show placed cards in stop order.
+// Stable display order for the photo grid and mobile thumbnail strip.
+// Initialized to shuffle order; reordered after each guess to show placed
+// cards in stop order followed by unused cards.
 let gridOrder = [];   // array of card.id strings
 
 // Landscape layout detection
@@ -135,18 +136,60 @@ function isMobile() {
   return overlay ? overlay.offsetWidth <= 768 : window.innerWidth <= 768;
 }
 
-// After placing a card, advance mobileFeaturedName to the next unplaced/non-eliminated card
+// After placing a card, advance mobileFeaturedName to the next actionable card.
+// Priority: yellow (wrong_slot in last guess) > neutral (never placed) > skip green/red.
+// Walks gridOrder so the advance respects the post-guess sort.
 function advanceMobileFeatured(placedId) {
-  const idx = cards.findIndex(c => c.id === placedId);
-  if (idx === -1) return;
-  const n = cards.length;
-  for (let i = 1; i <= n; i++) {
-    const c = cards[(idx + i) % n];
-    const isPlaced = Object.values(assignments).some(a => a.id === c.id);
-    const isElim   = confirmedDecoyIdsGlobal.has(c.id);
-    if (!isPlaced && !isElim) { mobileFeaturedName = c.id; return; }
+  const lastGuess = guessHistory.length > 0 ? guessHistory[guessHistory.length - 1] : null;
+
+  // Build a lookup: card.id → last-guess feedback result (if any)
+  const lastFbOf = {};
+  if (lastGuess) {
+    Object.entries(lastGuess.assignments).forEach(([si, card]) => {
+      if (card) lastFbOf[card.id] = lastGuess.feedback[parseInt(si)];
+    });
   }
-  // All placed/eliminated — stay on current
+
+  function cardIsSkippable(c) {
+    // Skip confirmed-eliminated decoys (red)
+    if (confirmedDecoyIdsGlobal.has(c.id)) return true;
+    // Skip currently-locked correct placements (green)
+    const placedEntry = Object.entries(assignments).find(([, a]) => a.id === c.id);
+    if (placedEntry && slotIsLocked(parseInt(placedEntry[0]))) return true;
+    return false;
+  }
+
+  function cardIsYellow(c) {
+    return lastFbOf[c.id] === 'wrong_slot';
+  }
+
+  // Walk gridOrder starting after placedId, two passes: yellows first, then neutrals
+  const startIdx = gridOrder.indexOf(placedId);
+  const n = gridOrder.length;
+
+  // Pass 1: yellow (wrong_slot)
+  for (let i = 1; i <= n; i++) {
+    const id = gridOrder[(startIdx + i) % n];
+    const c = cards.find(card => card.id === id);
+    if (!c || cardIsSkippable(c)) continue;
+    if (cardIsYellow(c)) { mobileFeaturedName = c.id; return; }
+  }
+  // Pass 2: neutral (not placed at all, not skippable)
+  for (let i = 1; i <= n; i++) {
+    const id = gridOrder[(startIdx + i) % n];
+    const c = cards.find(card => card.id === id);
+    if (!c || cardIsSkippable(c)) continue;
+    const isCurrentlyPlaced = Object.values(assignments).some(a => a.id === c.id);
+    if (!isCurrentlyPlaced) { mobileFeaturedName = c.id; return; }
+  }
+  // Fallback: any non-skippable card
+  for (let i = 1; i <= n; i++) {
+    const id = gridOrder[(startIdx + i) % n];
+    const c = cards.find(card => card.id === id);
+    if (!c || cardIsSkippable(c)) continue;
+    mobileFeaturedName = c.id; return;
+  }
+  // All skippable — stay put
   mobileFeaturedName = placedId;
 }
 
@@ -253,7 +296,6 @@ async function checkAnswers() {
     guessesRemaining = result.guesses_remaining;
 
     // ── v16: reorder grid to reflect this guess ──
-    // Placed cards appear in stop order (0..N-1); unused cards follow in their previous relative order.
     {
       const N = currentRoute.stop_count;
       const placedIds = Array.from({ length: N }, (_, i) => assignments[i]?.id).filter(Boolean);
@@ -277,6 +319,35 @@ async function checkAnswers() {
       });
       assignments  = newAssignments;
       selectedCard = null;
+
+      // ── v16 mobile: set featured card after reorder ──
+      {
+        const lastGuess = guessHistory[guessHistory.length - 1];
+        const fbById = {};
+        if (lastGuess) {
+          Object.entries(lastGuess.assignments).forEach(([si, card]) => {
+            if (card) fbById[card.id] = lastGuess.feedback[parseInt(si)];
+          });
+        }
+        const freshDecoys = new Set(confirmedDecoyIdsGlobal);
+        if (lastGuess) {
+          Object.entries(lastGuess.assignments).forEach(([si, card]) => {
+            if (card && lastGuess.feedback[parseInt(si)] === 'decoy') freshDecoys.add(card.id);
+          });
+        }
+        const isSkippable = (id) => {
+          if (freshDecoys.has(id)) return true;
+          const pe = Object.entries(newAssignments).find(([, a]) => a?.id === id);
+          return pe ? slotIsLocked(parseInt(pe[0])) : false;
+        };
+        const N = currentRoute.stop_count;
+        const placedZone = gridOrder.slice(0, N);
+        const unusedZone = gridOrder.slice(N);
+        const firstYellow = placedZone.find(id => !isSkippable(id) && fbById[id] === 'wrong_slot') || null;
+        const firstNeutral = unusedZone.find(id => !isSkippable(id)) || null;
+        mobileFeaturedName = firstYellow || firstNeutral || gridOrder[0];
+      }
+
       render();
       redrawGeoMap();
     }
@@ -1195,14 +1266,10 @@ function render() {
   const guessNum = guessHistory.length + 1;
 
   // ── Photo grid (v16: ordered by gridOrder, separator after placed zone) ──
-  // After guess 1+, gridOrder puts placed cards first (in stop order), unused after.
-  // We look up the last guess's assignments/feedback to render historical badges.
   const lastGuess      = guessHistory.length > 0 ? guessHistory[guessHistory.length - 1] : null;
   const lastPlacedIds  = lastGuess
     ? new Set(Array.from({ length: currentRoute.stop_count }, (_, i) => lastGuess.assignments[i]?.id).filter(Boolean))
     : new Set();
-
-  // Build a reverse-lookup: card.id → stop index in LAST guess (for historical badge)
   const lastGuessStopOf = {};
   if (lastGuess) {
     Object.entries(lastGuess.assignments).forEach(([si, card]) => {
@@ -1229,7 +1296,6 @@ function render() {
     const scale   = isSelected  ? 'transform:scale(1.04);' : isPlaced ? 'transform:scale(0.96);' : '';
     const cursor  = (locked || isDecoyElim) ? 'default' : 'pointer';
 
-    // Current-state badge (placement number, lock check, or decoy ✗)
     const badgeContent = locked
       ? `<div class="photo-badge" style="background:rgba(22,101,52,0.9);border-color:#4ade80;"><span style="color:#4ade80;">✓</span></div>`
       : isPlaced
@@ -1238,7 +1304,6 @@ function render() {
           ? `<div class="photo-badge" style="background:rgba(127,29,29,0.85);border-color:#f87171;"><span style="color:#f87171;font-size:0.7rem;">✗</span></div>`
           : '';
 
-    // v16 historical feedback badge — top-left corner, ordered zone only, only when a prior guess exists
     let histBadge = '';
     if (inOrderedZone && lastGuess && lastGuessStopOf[c.id] !== undefined) {
       const histSlot = lastGuessStopOf[c.id];
@@ -1279,14 +1344,12 @@ function render() {
     </div>`;
   }
 
-  // Render grid items in gridOrder; inject separator between placed and unused zones
   let photoGridHTML = '';
   const separatorInjected = { done: false };
   gridOrder.forEach(id => {
     const c = cards.find(card => card.id === id);
     if (!c) return;
     const inOrderedZone = lastPlacedIds.has(id);
-    // Inject separator at the transition from ordered → unused zone
     if (!inOrderedZone && !separatorInjected.done && lastGuess && lastPlacedIds.size > 0) {
       separatorInjected.done = true;
       photoGridHTML += `<div class="grid-zone-separator" style="
@@ -1531,8 +1594,27 @@ function render() {
       <svg width="11" height="11" viewBox="0 0 11 11" fill="none"><path d="M1 4V1h3M7 1h3v3M10 7v3H7M4 10H1V7" stroke="rgba(240,239,245,0.7)" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
     </button>`;
 
-    // Thumbnail strip
-    const thumbsHTML = cards.map((c, i) => {
+    // Thumbnail strip — ordered by gridOrder (same sort as desktop grid after a guess)
+    // Historical feedback color is derived from the last guess for each card in the placed zone.
+    const lastGuessForThumb = guessHistory.length > 0 ? guessHistory[guessHistory.length - 1] : null;
+    const lastFbOfThumb = {};
+    const lastSlotOfThumb = {};  // card.id → stop index (1-based) in last guess
+    if (lastGuessForThumb) {
+      Object.entries(lastGuessForThumb.assignments).forEach(([si, card]) => {
+        if (card) {
+          lastFbOfThumb[card.id] = lastGuessForThumb.feedback[parseInt(si)];
+          lastSlotOfThumb[card.id] = parseInt(si) + 1;  // 1-based stop number
+        }
+      });
+    }
+    const lastPlacedIdsForThumb = lastGuessForThumb
+      ? new Set(Object.values(lastGuessForThumb.assignments).filter(Boolean).map(c => c.id))
+      : new Set();
+
+    const thumbsHTML = gridOrder.map(id => {
+      const c = cards.find(card => card.id === id);
+      if (!c) return '';
+      const i = cards.indexOf(c);
       const tIsElim     = confirmedDecoyIds.has(c.id);
       const tIsUserDecoy = userFlaggedDecoys.has(c.id);
       const tPlaced     = Object.entries(assignments).find(([, a]) => a.id === c.id);
@@ -1549,11 +1631,32 @@ function render() {
       else if (tIsPlaced) cls += ' mt-picked';
       if (tIsElim)      cls += ' mt-elim';
       else if (tIsUserDecoy) cls += ' mt-user-decoy';
+      // Historical feedback — compute before using in both border and dot badge
+      const histFb   = lastPlacedIdsForThumb.has(c.id) ? lastFbOfThumb[c.id] : null;
+      const histStop = lastSlotOfThumb[c.id] || '';
+      // Historical feedback border (yellow/red) — applied when not already green or elim
+      if (!tLocked && !tIsElim) {
+        if (histFb === 'wrong_slot') cls += ' mt-hist-yellow';
+        else if (histFb === 'decoy') cls += ' mt-hist-red';
+      }
 
+      // Dot badge: historical feedback (colored) takes priority for cards in the last placed zone;
+      // current-state badges (locked ✓, placed ↑, elim ✗) used otherwise.
+      // Historical badges also show the stop number from the last guess.
       let dotBadge = '';
-      if (tLocked)       dotBadge = `<div class="mt-dot-badge mt-dot-locked">✓</div>`;
-      else if (tIsPlaced) dotBadge = `<div class="mt-dot-badge mt-dot-placed">↑</div>`;
-      else if (tIsElim)  dotBadge = `<div class="mt-dot-badge mt-dot-elim">✗</div>`;
+      if (histFb === 'correct') {
+        dotBadge = `<div class="mt-dot-badge mt-dot-locked">✓${histStop}</div>`;
+      } else if (histFb === 'wrong_slot') {
+        dotBadge = `<div class="mt-dot-badge mt-dot-wrongslot">${histStop}</div>`;
+      } else if (histFb === 'decoy') {
+        dotBadge = `<div class="mt-dot-badge mt-dot-elim">✗</div>`;
+      } else if (tLocked) {
+        dotBadge = `<div class="mt-dot-badge mt-dot-locked">✓</div>`;
+      } else if (tIsPlaced) {
+        dotBadge = `<div class="mt-dot-badge mt-dot-placed">↑</div>`;
+      } else if (tIsElim) {
+        dotBadge = `<div class="mt-dot-badge mt-dot-elim">✗</div>`;
+      }
 
       return `<div class="${cls}" data-mt-thumb="${c.id}" data-mt-idx="${i}">
         <img src="${c.photo}" alt="" draggable="false"/>
@@ -1596,11 +1699,11 @@ function render() {
       </div>`;
   } else if (isMobile()) {
     app.innerHTML = `
-      ${historyHTML}
       <div class="map-panel" id="map-panel">
         ${mapContentHTML}
       </div>
-      ${mobileTrayHTML}`;
+      ${mobileTrayHTML}
+      ${historyHTML}`;
   } else {
     app.innerHTML = `
       <div class="play-desktop-row">
@@ -1734,9 +1837,20 @@ function render() {
       const dy = e.changedTouches[0].clientY - sy;
       if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 36) {
         const dir = dx < 0 ? 1 : -1;
-        const curIdx = cards.findIndex(c => c.id === (mobileFeaturedCard?.id));
-        const next = (curIdx + dir + cards.length) % cards.length;
-        mobileFeaturedName = cards[next].id;
+        // Walk gridOrder in the swipe direction; skip greens (locked) and reds (confirmed decoy)
+        const curIdx = gridOrder.indexOf(mobileFeaturedCard?.id);
+        const n = gridOrder.length;
+        let nextId = null;
+        for (let i = 1; i <= n; i++) {
+          const id = gridOrder[(curIdx + dir * i + n) % n];
+          const c = cards.find(card => card.id === id);
+          if (!c) continue;
+          if (confirmedDecoyIdsGlobal.has(c.id)) continue;
+          const placedEntry = Object.entries(assignments).find(([, a]) => a.id === c.id);
+          if (placedEntry && slotIsLocked(parseInt(placedEntry[0]))) continue;
+          nextId = id; break;
+        }
+        if (nextId) mobileFeaturedName = nextId;
         // Swiping = browsing: deselect armed card
         selectedCard = null;
         render();
