@@ -1292,14 +1292,25 @@ body {
   opacity: 0.55;
 }
 
+.mt-thumb.mt-hist-yellow {
+  border-color: #facc15;
+  opacity: 0.9;
+}
+
+.mt-thumb.mt-hist-red {
+  border-color: #f87171;
+  opacity: 0.5;
+}
+
 /* Dot badges on thumbnails */
 .mt-dot-badge {
   position: absolute;
   bottom: 2px;
   right: 2px;
-  width: 14px;
+  min-width: 14px;
   height: 14px;
-  border-radius: 50%;
+  padding: 0 2px;
+  border-radius: 7px;
   font-size: 0.42rem;
   font-weight: 700;
   display: flex;
@@ -1326,6 +1337,12 @@ body {
   background: rgba(127,29,29,0.92);
   color: #f87171;
   border-color: #f87171;
+}
+
+.mt-dot-wrongslot {
+  background: rgba(113,63,18,0.92);
+  color: #facc15;
+  border-color: #facc15;
 }
 
 /* Hide desktop grid on mobile */
