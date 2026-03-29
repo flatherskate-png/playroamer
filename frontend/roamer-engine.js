@@ -28,7 +28,7 @@ let cards        = [];
 let assignments  = {};   // slotIndex -> card
 let revealed     = false;
 let score        = null;
-let history      = [];
+let history      = loadHistory();
 let leafletMap   = null;
 let playSource   = "home";
 let lightboxIndex = null;
@@ -91,6 +91,14 @@ function saveStopFlags(flags) {
   try { localStorage.setItem('roamer_stop_flags', JSON.stringify(flags)); } catch {}
 }
 
+// ── Persistent route history (score badges) ──
+function loadHistory() {
+  try { return JSON.parse(localStorage.getItem('roamer_history') || '[]'); } catch { return []; }
+}
+function saveHistory() {
+  try { localStorage.setItem('roamer_history', JSON.stringify(history)); } catch {}
+}
+
 function shuffle(arr) {
   const a = [...arr];
   for (let i = a.length - 1; i > 0; i--) {
@@ -138,11 +146,12 @@ function isMobile() {
 
 // After placing a card, advance mobileFeaturedName to the next actionable card.
 // Priority: yellow (wrong_slot in last guess) > neutral (never placed) > skip green/red.
-// Walks gridOrder so the advance respects the post-guess sort.
+// After placing a card, advance mobileFeaturedName to the next actionable card.
+// Order: yellows (wrong_slot) in gridOrder sequence, then neutrals (never placed).
+// Greens (locked) and confirmed reds are always skipped.
 function advanceMobileFeatured(placedId) {
   const lastGuess = guessHistory.length > 0 ? guessHistory[guessHistory.length - 1] : null;
 
-  // Build a lookup: card.id → last-guess feedback result (if any)
   const lastFbOf = {};
   if (lastGuess) {
     Object.entries(lastGuess.assignments).forEach(([si, card]) => {
@@ -151,46 +160,42 @@ function advanceMobileFeatured(placedId) {
   }
 
   function cardIsSkippable(c) {
-    // Skip confirmed-eliminated decoys (red)
     if (confirmedDecoyIdsGlobal.has(c.id)) return true;
-    // Skip currently-locked correct placements (green)
     const placedEntry = Object.entries(assignments).find(([, a]) => a.id === c.id);
-    if (placedEntry && slotIsLocked(parseInt(placedEntry[0]))) return true;
-    return false;
+    return placedEntry ? slotIsLocked(parseInt(placedEntry[0])) : false;
   }
 
-  function cardIsYellow(c) {
-    return lastFbOf[c.id] === 'wrong_slot';
-  }
+  // Build the full priority sequence: yellows in gridOrder order, then neutrals in gridOrder order.
+  // Build BEFORE filtering out placedId so we can find our current position in the sequence.
+  const yellows  = gridOrder.filter(id => {
+    const c = cards.find(card => card.id === id);
+    return c && !cardIsSkippable(c) && lastFbOf[id] === 'wrong_slot';
+  });
+  const neutrals = gridOrder.filter(id => {
+    const c = cards.find(card => card.id === id);
+    // A neutral is a card with no last-guess feedback that isn't currently locked/elim.
+    // Include placedId here temporarily so we can find position; it will be skipped on next render.
+    const isPlaced = id !== placedId && Object.values(assignments).some(a => a.id === id);
+    return c && !cardIsSkippable(c) && !lastFbOf[id] && !isPlaced;
+  });
+  const sequence = [...yellows, ...neutrals];
+  console.log('[advance] placedId:', placedId);
+  console.log('[advance] yellows:', yellows);
+  console.log('[advance] neutrals:', neutrals);
+  console.log('[advance] sequence:', sequence);
+  console.log('[advance] curIdx in sequence:', sequence.indexOf(placedId));
 
-  // Walk gridOrder starting after placedId, two passes: yellows first, then neutrals
-  const startIdx = gridOrder.indexOf(placedId);
-  const n = gridOrder.length;
+  if (!sequence.length) { mobileFeaturedName = placedId; return; }
 
-  // Pass 1: yellow (wrong_slot)
-  for (let i = 1; i <= n; i++) {
-    const id = gridOrder[(startIdx + i) % n];
-    const c = cards.find(card => card.id === id);
-    if (!c || cardIsSkippable(c)) continue;
-    if (cardIsYellow(c)) { mobileFeaturedName = c.id; return; }
+  // Find where placedId sits in the sequence and advance to the next entry
+  const curIdx = sequence.indexOf(placedId);
+  if (curIdx !== -1 && curIdx < sequence.length - 1) {
+    // Currently in the sequence — step forward
+    mobileFeaturedName = sequence[curIdx + 1];
+  } else {
+    // Not in sequence (e.g. was a neutral not yet in sequence) or at end — start from beginning
+    mobileFeaturedName = sequence[0];
   }
-  // Pass 2: neutral (not placed at all, not skippable)
-  for (let i = 1; i <= n; i++) {
-    const id = gridOrder[(startIdx + i) % n];
-    const c = cards.find(card => card.id === id);
-    if (!c || cardIsSkippable(c)) continue;
-    const isCurrentlyPlaced = Object.values(assignments).some(a => a.id === c.id);
-    if (!isCurrentlyPlaced) { mobileFeaturedName = c.id; return; }
-  }
-  // Fallback: any non-skippable card
-  for (let i = 1; i <= n; i++) {
-    const id = gridOrder[(startIdx + i) % n];
-    const c = cards.find(card => card.id === id);
-    if (!c || cardIsSkippable(c)) continue;
-    mobileFeaturedName = c.id; return;
-  }
-  // All skippable — stay put
-  mobileFeaturedName = placedId;
 }
 
 // Resolve which card should be shown in the featured slot
@@ -309,7 +314,8 @@ async function checkAnswers() {
       revealData = await revealResp.json();
       score = result.correct_count;
       revealed = true;
-      history.push({ route: currentRoute.name, score: result.correct_count, total: result.total_stops });
+      history.push({ id: currentRoute.id, route: currentRoute.name, score: result.correct_count, total: result.total_stops });
+      saveHistory();
       render();
       setTimeout(initLeafletMap, 50);
     } else {
@@ -1052,6 +1058,23 @@ function redrawGeoMap() {
   drawGeoMap(1, 0);
 }
 
+function routeScoreBadge(routeId) {
+  const entry = [...history].reverse().find(h => h.id === routeId);
+  if (!entry) return '';
+  const perfect = entry.score === entry.total;
+  const col = perfect ? '#4ade80' : '#f87171';
+  const bg  = perfect ? 'rgba(22,101,52,0.85)' : 'rgba(127,29,29,0.85)';
+  const icon = perfect ? '✓' : '✕';
+  return `<div style="
+    position:absolute;bottom:8px;right:10px;
+    display:flex;align-items:center;gap:4px;
+    padding:3px 7px;border-radius:6px;
+    background:${bg};border:1.5px solid ${col};
+    font-size:0.68rem;font-weight:700;color:${col};line-height:1;
+    pointer-events:none;
+  ">${icon} ${entry.score}/${entry.total}</div>`;
+}
+
 function routeMiniSVG(r) {
   const lats=r.slots.map(s=>s.lat), lngs=getDisplayLngs(r);
   const minLat=Math.min(...lats), maxLat=Math.max(...lats), minLng=Math.min(...lngs), maxLng=Math.max(...lngs);
@@ -1074,7 +1097,6 @@ function frozenRowHTML(gh, guessNum) {
   const scoreCol = correct === currentRoute.stop_count ? "#4ade80" : "#7dd3fc";
   return `<div class="frozen-row">
     <div class="frozen-label">
-      <span style="font-size:0.58rem;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-3);">G${guessNum}</span>
       <span style="font-size:0.72rem;font-weight:500;color:${scoreCol};">${correct}/${currentRoute.stop_count}</span>
     </div>
     <div class="frozen-thumbs">
@@ -1089,6 +1111,7 @@ function frozenRowHTML(gh, guessNum) {
         </div>`;
       }).join("")}
     </div>
+    <div class="frozen-guess-label">Guess ${guessNum}</div>
   </div>`;
 }
 
@@ -1149,6 +1172,10 @@ function render() {
     document.querySelectorAll('.nav-brand .nav-divider, .nav-brand .nav-route-name').forEach(el => el.remove());
     document.getElementById('nav-sub-line')?.remove();
   } else if (screen === "core") {
+    navRight.innerHTML = `<button class="btn-ghost" id="nav-home">← Home</button>`;
+    navRight.querySelector('#nav-home').addEventListener('click', () => closeOverlay());
+    if (navEl) navEl.classList.remove('nav-play-mode');
+  } else if (screen === "winter") {
     navRight.innerHTML = `<button class="btn-ghost" id="nav-home">← Home</button>`;
     navRight.querySelector('#nav-home').addEventListener('click', () => closeOverlay());
     if (navEl) navEl.classList.remove('nav-play-mode');
@@ -1218,7 +1245,7 @@ function render() {
     } else {
       grandBody = '<div class="section-label">Grand Adventures</div><div class="route-grid">'
         + grandRoutes.map(r =>
-            `<button class="route-btn" data-route="${r.id}">${routeMiniSVG(r)}<div><div class="rname">${r.name}</div><div class="rmeta">${r.region} · ${r.stop_count} stops · ${r.decoy_count} decoys</div></div></button>`
+            `<button class="route-btn" data-route="${r.id}">${routeMiniSVG(r)}<div><div class="rname">${r.name}</div><div class="rmeta">${r.region} · ${r.stop_count} stops · ${r.decoy_count} decoys</div></div>${routeScoreBadge(r.id)}</button>`
           ).join('') + '</div>';
     }
     app.innerHTML = '<div style="margin-bottom:28px;">'
@@ -1244,7 +1271,7 @@ function render() {
       </div>
       <div class="section-label">All Routes</div>
       <div class="route-grid">
-        ${winterRoutes.map(r=>`<button class="route-btn" data-route="${r.id}">${routeMiniSVG(r)}<div><div class="rname">${r.name}</div><div class="rmeta">${r.region} · ${r.stop_count} stops · ${r.decoy_count} decoys</div></div></button>`).join("")}
+        ${winterRoutes.map(r=>`<button class="route-btn" data-route="${r.id}">${routeMiniSVG(r)}<div><div class="rname">${r.name}</div><div class="rmeta">${r.region} · ${r.stop_count} stops · ${r.decoy_count} decoys</div></div>${routeScoreBadge(r.id)}</button>`).join("")}
       </div>`;
     document.querySelectorAll(".route-btn").forEach(btn => {
       const r = allRoutes.find(r => r.id === btn.dataset.route);
@@ -1381,7 +1408,6 @@ function render() {
   // Past guesses
   const historyHTML = guessHistory.length > 0
     ? `<div class="panel panel-padded guess-history-panel">
-        <div class="panel-label" style="margin-bottom:8px;">Past Guesses</div>
         <div class="frozen-rows-wrap">
           ${[...guessHistory].map((gh, i) => frozenRowHTML(gh, i + 1)).join("")}
         </div>
@@ -1925,8 +1951,11 @@ function goBack() {
   if (leafletMap) { leafletMap.remove(); leafletMap = null; }
   const floatWrap = document.getElementById('floating-submit');
   if (floatWrap) floatWrap.classList.remove('visible');
+  document.getElementById('nav-sub-line')?.remove();
+  document.querySelectorAll('.nav-brand .nav-divider, .nav-brand .nav-route-name').forEach(el => el.remove());
   if (playSource === 'core') { screen = 'core'; render(); }
-  else closeOverlay();
+  else if (playSource === 'winter') { screen = 'winter'; render(); }
+  else { updateLandingPageState(); closeOverlay(); }
 }
 
 document.getElementById('play-btn').addEventListener('click', function(e) {
@@ -1972,10 +2001,39 @@ async function fetchRoutes() {
     const recentEl = document.getElementById('recent-count');
     if (grandEl)  grandEl.textContent  = grandCount  === 1 ? '1 route'  : `${grandCount} routes`;
     if (recentEl) recentEl.textContent = recentCount === 1 ? '1 route'  : `${recentCount} routes`;
+    updateLandingPageState();
     // If the overlay is open and showing loading state, refresh it
     if (screen === 'home') render();
   } catch (err) {
     console.error('Failed to load routes:', err);
+  }
+}
+
+function updateLandingPageState() {
+  if (!dailyRoute) return;
+  const dotEl    = document.querySelector('.eyebrow-dot');
+  const textEl   = document.querySelector('.eyebrow-text');
+  const labelEl  = document.querySelector('.cta-label');
+  if (!dotEl || !textEl || !labelEl) return;
+
+  const entry = [...history].reverse().find(h => h.id === dailyRoute.id);
+  if (!entry) {
+    // Not yet played — defaults
+    dotEl.style.background   = '';
+    dotEl.style.boxShadow    = '';
+    textEl.textContent       = "Today's route is live";
+    textEl.style.color       = '';
+    labelEl.textContent      = "Start Today's Route";
+  } else {
+    const perfect = entry.score === entry.total;
+    const col     = perfect ? '#4ade80' : '#f87171';
+    dotEl.style.background   = col;
+    dotEl.style.boxShadow    = `0 0 6px ${col}`;
+    textEl.textContent       = perfect
+      ? `Today's route complete — ${entry.score}/${entry.total} ✓`
+      : `Today's route played — ${entry.score}/${entry.total}`;
+    textEl.style.color       = col;
+    labelEl.textContent      = "Play again";
   }
 }
 
