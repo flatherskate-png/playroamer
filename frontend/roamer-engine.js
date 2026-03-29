@@ -47,6 +47,11 @@ let selectedCard = null;
 let mobileFeaturedName = null;   // card.id of featured photo in mobile tray
 let userFlaggedDecoys  = new Set(); // card.ids user suspects are decoys (orange state)
 
+// ── Grid order (v16) ──
+// Stable display order for the photo grid. Initialized to shuffle order;
+// reordered after each guess to show placed cards in stop order.
+let gridOrder = [];   // array of card.id strings
+
 // Landscape layout detection
 let isLandscape = false;
 let resizeObserver = null;
@@ -100,6 +105,7 @@ function startGame(r, source) {
   // r.photos is already shuffled by the server (stops + decoys mixed, no lat/lng).
   // Reshuffle client-side so retries get a fresh order.
   cards            = shuffle([...r.photos]);
+  gridOrder        = cards.map(c => c.id);
   assignments      = {};
   selectedCard     = null;
   mobileFeaturedName = null;
@@ -245,6 +251,16 @@ async function checkAnswers() {
     lastFeedback = feedback;
     guessHistory.push({ assignments: { ...assignments }, feedback: { ...feedback } });
     guessesRemaining = result.guesses_remaining;
+
+    // ── v16: reorder grid to reflect this guess ──
+    // Placed cards appear in stop order (0..N-1); unused cards follow in their previous relative order.
+    {
+      const N = currentRoute.stop_count;
+      const placedIds = Array.from({ length: N }, (_, i) => assignments[i]?.id).filter(Boolean);
+      const placedSet = new Set(placedIds);
+      const unusedIds = gridOrder.filter(id => !placedSet.has(id));
+      gridOrder = [...placedIds, ...unusedIds];
+    }
 
     if (result.solved || result.guesses_remaining === 0) {
       const revealResp = await fetch(`${API_BASE}/api/v1/routes/${currentRoute.id}/reveal`);
@@ -1178,8 +1194,23 @@ function render() {
   const filled   = allSlotsFilled();
   const guessNum = guessHistory.length + 1;
 
-  // ── Photo grid ──
-  const photoGridHTML = cards.map(c => {
+  // ── Photo grid (v16: ordered by gridOrder, separator after placed zone) ──
+  // After guess 1+, gridOrder puts placed cards first (in stop order), unused after.
+  // We look up the last guess's assignments/feedback to render historical badges.
+  const lastGuess      = guessHistory.length > 0 ? guessHistory[guessHistory.length - 1] : null;
+  const lastPlacedIds  = lastGuess
+    ? new Set(Array.from({ length: currentRoute.stop_count }, (_, i) => lastGuess.assignments[i]?.id).filter(Boolean))
+    : new Set();
+
+  // Build a reverse-lookup: card.id → stop index in LAST guess (for historical badge)
+  const lastGuessStopOf = {};
+  if (lastGuess) {
+    Object.entries(lastGuess.assignments).forEach(([si, card]) => {
+      if (card) lastGuessStopOf[card.id] = parseInt(si);
+    });
+  }
+
+  function renderPhotoCard(c, inOrderedZone) {
     const isDecoyElim = confirmedDecoyIds.has(c.id);
     const placedSlot  = Object.entries(assignments).find(([, a]) => a.id === c.id);
     const slotIdx     = placedSlot ? parseInt(placedSlot[0]) : -1;
@@ -1198,6 +1229,7 @@ function render() {
     const scale   = isSelected  ? 'transform:scale(1.04);' : isPlaced ? 'transform:scale(0.96);' : '';
     const cursor  = (locked || isDecoyElim) ? 'default' : 'pointer';
 
+    // Current-state badge (placement number, lock check, or decoy ✗)
     const badgeContent = locked
       ? `<div class="photo-badge" style="background:rgba(22,101,52,0.9);border-color:#4ade80;"><span style="color:#4ade80;">✓</span></div>`
       : isPlaced
@@ -1205,6 +1237,24 @@ function render() {
         : isDecoyElim
           ? `<div class="photo-badge" style="background:rgba(127,29,29,0.85);border-color:#f87171;"><span style="color:#f87171;font-size:0.7rem;">✗</span></div>`
           : '';
+
+    // v16 historical feedback badge — top-left corner, ordered zone only, only when a prior guess exists
+    let histBadge = '';
+    if (inOrderedZone && lastGuess && lastGuessStopOf[c.id] !== undefined) {
+      const histSlot = lastGuessStopOf[c.id];
+      const histFb   = lastGuess.feedback[histSlot];
+      if (histFb) {
+        const fb = FEEDBACK[histFb];
+        const bgMap  = { correct: 'rgba(22,101,52,0.9)', wrong_slot: 'rgba(113,63,18,0.9)', decoy: 'rgba(127,29,29,0.9)' };
+        const colMap = { correct: '#4ade80',             wrong_slot: '#facc15',              decoy: '#f87171'             };
+        histBadge = `<div style="position:absolute;top:5px;left:5px;z-index:6;
+          display:flex;align-items:center;gap:2px;padding:2px 5px 2px 4px;border-radius:5px;
+          background:${bgMap[histFb]};border:1.5px solid ${colMap[histFb]};
+          font-size:0.6rem;font-weight:700;color:${colMap[histFb]};line-height:1;pointer-events:none;">
+          <span>${fb.icon}</span><span style="opacity:0.85;">${histSlot + 1}</span>
+        </div>`;
+      }
+    }
 
     const selectedRing = isSelected
       ? `<div style="position:absolute;inset:-3px;border-radius:17px;border:2px solid var(--cyan);animation:pin-pulse 1s ease-in-out infinite;pointer-events:none;"></div>`
@@ -1221,12 +1271,38 @@ function render() {
         ${isDecoyElim ? `<div style="position:absolute;inset:0;background:rgba(0,0,0,0.45);"></div>` : ''}
       </div>
       ${selectedRing}
+      ${histBadge}
       ${badgeContent}
       <button class="expand-btn" data-expand="${cards.indexOf(c)}" aria-label="Expand" style="z-index:5;" onclick="event.stopPropagation();openLightbox(${cards.indexOf(c)})">
         <svg width="11" height="11" viewBox="0 0 11 11" fill="none"><path d="M1 4V1h3M7 1h3v3M10 7v3H7M4 10H1V7" stroke="rgba(240,239,245,0.7)" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </button>
     </div>`;
-  }).join('');
+  }
+
+  // Render grid items in gridOrder; inject separator between placed and unused zones
+  let photoGridHTML = '';
+  const separatorInjected = { done: false };
+  gridOrder.forEach(id => {
+    const c = cards.find(card => card.id === id);
+    if (!c) return;
+    const inOrderedZone = lastPlacedIds.has(id);
+    // Inject separator at the transition from ordered → unused zone
+    if (!inOrderedZone && !separatorInjected.done && lastGuess && lastPlacedIds.size > 0) {
+      separatorInjected.done = true;
+      photoGridHTML += `<div class="grid-zone-separator" style="
+        grid-column: 1 / -1;
+        display: flex; align-items: center; gap: 8px;
+        padding: 4px 0 2px;
+        font-size: 0.62rem; font-weight: 500; letter-spacing: 0.08em;
+        text-transform: uppercase; color: rgba(140,148,172,0.6);
+      ">
+        <div style="flex:1;height:1px;background:rgba(255,255,255,0.07);"></div>
+        <span>not used last guess</span>
+        <div style="flex:1;height:1px;background:rgba(255,255,255,0.07);"></div>
+      </div>`;
+    }
+    photoGridHTML += renderPhotoCard(c, inOrderedZone);
+  });
 
   // Instruction text
   let instruction;
