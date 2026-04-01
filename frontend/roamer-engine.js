@@ -6,7 +6,9 @@
 
 // ── API ──
 // TODO: replace with deployed Railway URL (e.g. https://roamer-backend-production.up.railway.app)
-const API_BASE = 'http://localhost:8000';
+const API_BASE = window.location.hostname === 'localhost'
+  ? 'http://localhost:8000'
+  : 'https://playroamer.railway.app';
 
 // ── Feedback result mapping (semantic API values → display) ──
 const FEEDBACK = {
