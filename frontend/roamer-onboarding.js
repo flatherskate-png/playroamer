@@ -21,6 +21,15 @@ function obSet(key)      { try { localStorage.setItem(key, '1'); } catch {} }
 function isFirstVisit()  { return !obGet(OB_KEYS.welcomed); }
 function isFirstGame()   { return !obGet(OB_KEYS.hint1) && !obGet(OB_KEYS.hint2); }
 
+// ?reset clears all onboarding state — useful for testing on any device
+if (new URLSearchParams(window.location.search).has('reset')) {
+  Object.values(OB_KEYS).forEach(k => { try { localStorage.removeItem(k); } catch {} });
+  // Remove the param from the URL without reloading
+  const url = new URL(window.location);
+  url.searchParams.delete('reset');
+  window.history.replaceState({}, '', url);
+}
+
 
 /* ══════════════════════════════════════════════════════
    STYLES — injected into <head>
