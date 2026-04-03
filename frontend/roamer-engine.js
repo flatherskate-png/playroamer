@@ -70,12 +70,16 @@ function attachResizeObserver() {
   const overlay = document.getElementById('game-overlay');
   if (!overlay || typeof ResizeObserver === 'undefined') return;
   resizeObserver = new ResizeObserver(() => {
-    const nowLandscape = checkLandscape();
-    const nowMobile = (document.getElementById('game-overlay')?.offsetWidth ?? window.innerWidth) <= 768;
-    if ((nowLandscape !== isLandscape || nowMobile !== isMobile()) && screen === 'play') {
-      isLandscape = nowLandscape;
-      render();
-    }
+    clearTimeout(resizeObserver._timer);
+    resizeObserver._timer = setTimeout(() => {
+      if (geoAnimating) return;
+      const nowLandscape = checkLandscape();
+      const nowMobile = (document.getElementById('game-overlay')?.offsetWidth ?? window.innerWidth) <= 768;
+      if ((nowLandscape !== isLandscape || nowMobile !== isMobile()) && screen === 'play') {
+        isLandscape = nowLandscape;
+        render();
+      }
+    }, 150);
   });
   resizeObserver.observe(overlay);
 }
@@ -111,6 +115,7 @@ function shuffle(arr) {
 }
 
 function startGame(r, source) {
+  if (!r) return;
   currentRoute     = r;
   playSource       = source || "home";
   // r.photos is already shuffled by the server (stops + decoys mixed, no lat/lng).
@@ -218,7 +223,7 @@ function resolveMobileFeatured() {
   });
   if (unplaced) return unplaced;
   // 4. Fallback
-  return cards[0];
+  return cards[0] ?? null;
 }
 
 
@@ -245,9 +250,13 @@ function tapPhoto(card) {
   } else {
     selectedCard = card;
   }
+  // Stop expand pulse on any photo interaction
+  document.querySelectorAll('.ob-pulse-target').forEach(el => el.classList.remove('ob-pulse-target'));
   mobileFeaturedName = card.id;
   render();
   redrawGeoMap();
+  // Fire hint after render so #ob-hint-slot exists in DOM
+  if (typeof window.obHint_photoSelected === 'function') window.obHint_photoSelected();
 }
 
 // ── Interaction: tap a pin ──
@@ -268,6 +277,8 @@ function tapPin(slotIndex) {
   }
   render();
   redrawGeoMap();
+  // Fire hint after render so #ob-hint-slot exists in DOM
+  if (typeof window.obHint_photoPlaced === 'function') window.obHint_photoPlaced();
 }
 
 function allSlotsFilled() {
@@ -1015,9 +1026,13 @@ function render() {
     }
 
     navRight.innerHTML = `
+      <button class="btn-ghost ob-nav-htp-btn" id="nav-htp" style="margin-right:6px;">? How to play</button>
       <button class="btn-ghost" id="nav-back">← Back</button>
     `;
     navRight.querySelector('#nav-back').addEventListener('click', goBack);
+    navRight.querySelector('#nav-htp').addEventListener('click', () => {
+      if (typeof window.openHowToPlay === 'function') window.openHowToPlay();
+    });
 
     // Sub-line as its own row below the nav
     let subLine = document.getElementById('nav-sub-line');
@@ -1230,7 +1245,7 @@ function render() {
       ${selectedRing}
       ${histBadge}
       ${badgeContent}
-      <button class="expand-btn" data-expand="${cards.indexOf(c)}" aria-label="Expand" style="z-index:5;" onclick="event.stopPropagation();openLightbox(${cards.indexOf(c)})">
+      <button class="expand-btn photo-expand-btn" data-expand="${cards.indexOf(c)}" aria-label="Expand" style="z-index:5;" onclick="event.stopPropagation();openLightbox(${cards.indexOf(c)})">
         <svg width="11" height="11" viewBox="0 0 11 11" fill="none"><path d="M1 4V1h3M7 1h3v3M10 7v3H7M4 10H1V7" stroke="rgba(240,239,245,0.7)" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </button>
     </div>`;
@@ -1585,6 +1600,7 @@ function render() {
         </div>
         <div class="play-col-photos">
           ${photoPanelHTML}
+          <div id="ob-hint-slot"></div>
           ${historyHTML}
         </div>
       </div>`;
@@ -1594,6 +1610,7 @@ function render() {
         ${mapContentHTML}
       </div>
       ${mobileTrayHTML}
+      <div id="ob-hint-slot"></div>
       ${historyHTML}`;
   } else {
     app.innerHTML = `
@@ -1605,6 +1622,7 @@ function render() {
         </div>
         <div>
           ${photoPanelHTML}
+          <div id="ob-hint-slot"></div>
           ${historyHTML}
         </div>
       </div>`;
@@ -1828,7 +1846,7 @@ document.getElementById('play-btn').addEventListener('click', function(e) {
   this.style.transform = 'scale(0.97)';
   setTimeout(() => { this.style.transform = ''; }, 150);
   openOverlay();
-  if (routesLoaded) {
+  if (routesLoaded && dailyRoute) {
     setTimeout(() => { startGame(dailyRoute, 'home'); }, 120);
   }
   // If routes aren't loaded yet, the overlay shows "Loading routes…" until fetchRoutes completes
