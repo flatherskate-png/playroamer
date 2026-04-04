@@ -395,7 +395,7 @@ body {
 
 .nav-route-name {
   font-family: 'Playfair Display', serif;
-  font-size: 1.25rem;
+  font-size: 1.1rem;
   font-weight: 400;
   color: var(--text-2);
   white-space: nowrap;
@@ -404,6 +404,22 @@ body {
   letter-spacing: 0.02em;
   line-height: 1.2;
 }
+
+/* ? help button — Playfair, right-justified, no box */
+.btn-nav-htp {
+  font-family: 'Playfair Display', serif;
+  font-size: 1.1rem;
+  font-weight: 500;
+  color: var(--text-2);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 2px 4px;
+  line-height: 1;
+  transition: color 0.2s;
+  -webkit-tap-highlight-color: transparent;
+}
+.btn-nav-htp:hover { color: var(--text); }
 
 .nav-route-sub {
   font-size: 0.62rem;
@@ -544,6 +560,7 @@ body {
 
 /* Map (Leaflet) */
 #leaflet-map { width: 100%; height: 360px; border-radius: 14px; background: #07101f; }
+.drc-map-flex #leaflet-map { height: 100%; border-radius: 0; }
 .leaflet-tile-pane { filter: saturate(0.15) brightness(0.4) hue-rotate(195deg); }
 .leaflet-container { background: #07101f; }
 
@@ -665,54 +682,199 @@ body {
 
 
 /* ═══════════════════════════════════════════════════════
-   COMPLETION SCREEN — drc-* components
+   COMPLETION SCREEN — full-height no-scroll layout
    ═══════════════════════════════════════════════════════ */
 
-.completion-layout { max-width: 600px; margin: 0 auto; padding-bottom: 40px; }
-
-/* Map hero — top corners rounded, bottom flat to fuse with perf band */
-.drc-map-wrap { border-radius: 16px 16px 0 0; overflow: hidden; border: 1px solid var(--border); border-bottom: none; }
-.drc-map-wrap #leaflet-map { height: min(50vh, 400px); min-height: 260px; }
-
-/* Perf + metrics band fused to map bottom */
-.drc-perf-band {
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
-  border-top: none;
-  border-radius: 0 0 16px 16px;
-  padding: 18px 20px 16px;
-  text-align: center;
-  margin-bottom: 16px;
+/* Overlay in revealed state: no scroll, flex column */
+#game-overlay.revealed {
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
-.drc-perf { font-family: 'Playfair Display', serif; font-size: 2.6rem; font-weight: 500; letter-spacing: -0.03em; line-height: 1; }
-.drc-perf-band .drc-perf { font-size: 2.2rem; margin-bottom: 12px; }
-.drc-perf-band .drc-metrics { margin-bottom: 0; }
 
-/* Metrics row */
-.drc-metrics { display: flex; align-items: stretch; border-radius: 12px; overflow: hidden; border: 1px solid var(--border); margin-bottom: 24px; }
-.drc-metric { flex: 1; padding: 14px 6px; display: flex; flex-direction: column; align-items: center; gap: 5px; min-width: 0; }
-.drc-metric-divider { width: 1px; background: var(--border); align-self: stretch; flex-shrink: 0; }
-.drc-metric-val { font-size: 1.3rem; font-weight: 700; color: var(--text); white-space: nowrap; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; line-height: 1; }
-.drc-metric-of { font-size: 0.78rem; font-weight: 400; color: var(--text-3); }
-.drc-metric-label { font-size: 0.6rem; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.08em; }
+/* Container fills remaining height as flex column */
+#game-overlay.revealed .container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding-bottom: 0;
+  min-height: 0;
+}
 
-/* Guess history with visual photo cells */
-.drc-guess-history { margin-bottom: 16px; }
-.drc-guess-row { background: var(--bg-panel); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; margin-bottom: 8px; }
-.drc-guess-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
-.drc-guess-label { font-size: 0.68rem; font-weight: 500; color: var(--text-2); letter-spacing: 0.06em; }
-.drc-guess-score { font-size: 0.68rem; font-weight: 600; letter-spacing: 0.04em; }
-.drc-guess-cells { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
-.drc-guess-cell { width: clamp(42px, 12vw, 56px); height: clamp(32px, 9vw, 42px); border-radius: 7px; position: relative; overflow: hidden; }
-.drc-guess-cell img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.drc-cell-overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
-.drc-cell-icon { width: 18px; height: 18px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.55rem; font-weight: 700; color: #fff; }
+/* #app fills remaining height */
+#game-overlay.revealed #app {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
 
-/* Share row */
-.drc-share-row { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; justify-content: center; background: var(--bg-panel); border: 1px solid var(--border); border-radius: 14px; padding: 14px 18px; }
-.drc-share-grid { font-size: 1.1rem; line-height: 1.7; text-align: left; flex-shrink: 0; }
-.drc-share-copy { background: rgba(255,255,255,0.06); border: 1px solid var(--border); color: var(--text-2); padding: 6px 14px; border-radius: 8px; cursor: pointer; font-family: inherit; font-size: 0.72rem; transition: background 0.2s; white-space: nowrap; }
-.drc-share-copy:hover { background: rgba(255,255,255,0.1); }
+/* Completion layout is a tight flex column filling all available height */
+.completion-layout {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  gap: 8px;
+}
+
+/* ── Stats hero ── */
+.drc-stats-hero {
+  padding: 4px 0 0;
+  text-align: center;
+  flex-shrink: 0;
+}
+.drc-stats-congrats {
+  font-family: 'Playfair Display', serif;
+  font-size: clamp(1.2rem, 3.5vw, 1.6rem);
+  font-weight: 500;
+  color: var(--text);
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  margin-bottom: 2px;
+}
+.drc-stats-time {
+  font-size: clamp(0.75rem, 2vw, 0.85rem);
+  font-weight: 400;
+  color: var(--text-2);
+  margin-bottom: 12px;
+  line-height: 1.4;
+}
+.drc-stats-metrics {
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  gap: 0;
+}
+.drc-stat-box {
+  flex: 1;
+  max-width: 120px;
+  padding: 6px 6px 4px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+.drc-stat-divider {
+  width: 1px;
+  background: var(--border);
+  align-self: stretch;
+  flex-shrink: 0;
+  margin: 4px 0;
+}
+.drc-stat-val {
+  font-family: 'Playfair Display', serif;
+  font-size: clamp(1.3rem, 3.5vw, 1.7rem);
+  font-weight: 500;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.03em;
+  line-height: 1;
+}
+.drc-stat-sublabel {
+  font-size: 0.58rem;
+  color: var(--text-3);
+  font-weight: 400;
+  letter-spacing: 0.02em;
+  text-align: center;
+  line-height: 1.2;
+}
+
+/* ── Emoji row ── */
+.drc-emoji-row-wrap {
+  display: flex;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.drc-emoji-row-single {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.drc-emoji-guess-divider {
+  width: 1px;
+  height: 18px;
+  background: rgba(255,255,255,0.15);
+  margin: 0 4px;
+  flex-shrink: 0;
+}
+.drc-emoji-sq {
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  flex-shrink: 0;
+}
+
+/* ── Map — grows to fill remaining space ── */
+.drc-map-flex {
+  flex: 1;
+  min-height: 0;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+.drc-map-flex #leaflet-map {
+  width: 100%;
+  height: 100%;
+}
+
+/* ── 3 CTA pill buttons ── */
+.drc-cta-bar {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.drc-cta-btn {
+  flex: 1;
+  padding: 11px 8px;
+  border-radius: 100px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: clamp(0.7rem, 1.8vw, 0.8rem);
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s, color 0.2s, box-shadow 0.2s;
+  white-space: nowrap;
+  -webkit-tap-highlight-color: transparent;
+  min-width: 0;
+  letter-spacing: 0.01em;
+  border: 1px solid;
+}
+.drc-cta-share {
+  color: var(--cyan);
+  background: rgba(125,211,252,0.07);
+  border-color: rgba(125,211,252,0.3);
+}
+.drc-cta-share:hover {
+  background: rgba(125,211,252,0.18);
+  border-color: rgba(125,211,252,0.6);
+  box-shadow: 0 0 16px rgba(125,211,252,0.15);
+}
+.drc-cta-play {
+  color: var(--text);
+  background: rgba(255,255,255,0.05);
+  border-color: rgba(255,255,255,0.12);
+}
+.drc-cta-play:hover {
+  background: rgba(255,255,255,0.12);
+  border-color: rgba(255,255,255,0.28);
+  box-shadow: 0 0 16px rgba(255,255,255,0.06);
+}
+.drc-cta-explore {
+  color: var(--violet);
+  background: rgba(192,132,252,0.07);
+  border-color: rgba(192,132,252,0.3);
+}
+.drc-cta-explore:hover {
+  background: rgba(192,132,252,0.18);
+  border-color: rgba(192,132,252,0.6);
+  box-shadow: 0 0 16px rgba(192,132,252,0.15);
+}
+
+/* ── Below-fold content (hidden until Explore is tapped on mobile) ── */
+.drc-below-fold {
+  display: none;
+}
 
 /* Stop list */
 .drc-stop-list { display: flex; flex-direction: column; margin-bottom: 10px; border-radius: 14px; overflow: hidden; border: 1px solid var(--border); }

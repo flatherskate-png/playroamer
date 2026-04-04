@@ -49,6 +49,11 @@ let selectedCard = null;
 let mobileFeaturedName = null;   // card.id of featured photo in mobile tray
 let userFlaggedDecoys  = new Set(); // card.ids user suspects are decoys (orange state)
 
+// ── Timer ──
+let gameStartTime  = null;   // Date.now() when game started
+let gameEndTime    = null;   // Date.now() when revealed
+let completionTime = null;   // elapsed ms, frozen at reveal
+
 // ── Grid order (v16) ──
 // Stable display order for the photo grid and mobile thumbnail strip.
 // Initialized to shuffle order; reordered after each guess to show placed
@@ -114,6 +119,14 @@ function shuffle(arr) {
   return a;
 }
 
+function formatTime(ms) {
+  if (!ms || ms < 0) return null;
+  const totalSec = Math.round(ms / 1000);
+  const m = Math.floor(totalSec / 60);
+  const s = totalSec % 60;
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+
 function startGame(r, source) {
   if (!r) return;
   currentRoute     = r;
@@ -135,12 +148,17 @@ function startGame(r, source) {
   cachedPinLayout = null;
   // Clear pin image cache for new route
   Object.keys(pinImageCache).forEach(k => delete pinImageCache[k]);
+  // Start timer
+  gameStartTime  = Date.now();
+  gameEndTime    = null;
+  completionTime = null;
   if (leafletMap)  { leafletMap.remove(); leafletMap = null; }
   window._persistCanvas = null;
   geoT = 0;
   geoAnimating = false;
   if (geoAnimHandle) { cancelAnimationFrame(geoAnimHandle); geoAnimHandle = null; }
   screen = "play";
+  document.getElementById('game-overlay')?.classList.remove('revealed');
   isLandscape = checkLandscape();
   attachResizeObserver();
   render();
@@ -327,6 +345,9 @@ async function checkAnswers() {
       revealData = await revealResp.json();
       score = result.correct_count;
       revealed = true;
+      // Stop timer
+      gameEndTime    = Date.now();
+      completionTime = gameStartTime ? (gameEndTime - gameStartTime) : null;
       history.push({ id: currentRoute.id, route: currentRoute.name, score: result.correct_count, total: result.total_stops });
       saveHistory();
       render();
@@ -429,7 +450,9 @@ function initLeafletMap() {
     });
   }
   leafletMap = map;
-  setTimeout(() => map.invalidateSize(), 200);
+  // Two passes: first after paint, second after flex has fully settled
+  setTimeout(() => map.invalidateSize(), 100);
+  setTimeout(() => map.invalidateSize(), 400);
 }
 
 
@@ -1026,23 +1049,11 @@ function render() {
     }
 
     navRight.innerHTML = `
-      <button class="btn-ghost ob-nav-htp-btn" id="nav-htp" style="margin-right:6px;">? How to play</button>
-      <button class="btn-ghost" id="nav-back">← Back</button>
+      <button class="btn-nav-htp ob-nav-htp-btn" id="nav-htp">?</button>
     `;
-    navRight.querySelector('#nav-back').addEventListener('click', goBack);
     navRight.querySelector('#nav-htp').addEventListener('click', () => {
       if (typeof window.openHowToPlay === 'function') window.openHowToPlay();
     });
-
-    // Sub-line as its own row below the nav
-    let subLine = document.getElementById('nav-sub-line');
-    if (!subLine) {
-      subLine = document.createElement('div');
-      subLine.id = 'nav-sub-line';
-      navEl.parentNode.insertBefore(subLine, navEl.nextSibling);
-    }
-    subLine.className = 'nav-sub-line';
-    subLine.innerHTML = `${currentRoute.region} · ${currentRoute.stop_count} stops · ${currentRoute.decoy_count} decoys · Guess ${guessNum} of ${MAX_GUESSES} <span class="nav-pips">${pipsHTML}</span>`;
 
     if (navEl) navEl.classList.add('nav-play-mode');
   } else if (screen === "home") {
@@ -1305,41 +1316,23 @@ function render() {
       : score >= currentRoute.stop_count * 0.75 ? 'Close' : score >= currentRoute.stop_count * 0.5 ? 'Halfway' : 'Rough road';
     const perfColor = won ? '#4ade80' : score >= currentRoute.stop_count / 2 ? '#7dd3fc' : '#f87171';
 
-    // Guess history rows with visual photo cells
-    const FB_BG_C = Object.fromEntries(Object.entries(FEEDBACK).map(([k,v]) => [k, v.bg.replace("0.3","0.45").replace("0.35","0.45")]));
-    const FB_BD_C = Object.fromEntries(Object.entries(FEEDBACK).map(([k,v]) => [k, v.border]));
-    const FB_IC_C = Object.fromEntries(Object.entries(FEEDBACK).map(([k,v]) => [k, v.icon]));
-    const guessHistoryHTML = guessHistory.map((gh, gi) => {
-      const guessCorrect = Object.values(gh.feedback).filter(f => f === "correct").length;
-      const guessScoreColor = guessCorrect === currentRoute.stop_count ? '#4ade80' : guessCorrect > 0 ? '#7dd3fc' : '#f87171';
-      const cells = Array.from({ length: currentRoute.stop_count }, (_, i) => {
-        const card = gh.assignments[i];
-        const fb = gh.feedback[i];
-        const bd = fb ? FB_BD_C[fb] : "rgba(255,255,255,0.1)";
-        const bg = fb ? FB_BG_C[fb] : "rgba(255,255,255,0.03)";
-        const icon = fb ? FB_IC_C[fb] : '';
-        const iconBg = fb ? FB_BD_C[fb] : 'transparent';
-        return `<div class="drc-guess-cell" style="border:1.5px solid ${bd};background:${bg};">
-          ${card ? `<img src="${card.photo}" onerror="this.style.display='none'"/>` : `<div style="display:flex;align-items:center;justify-content:center;height:100%;font-size:0.7rem;color:rgba(255,255,255,0.15);">${i + 1}</div>`}
-          ${fb ? `<div class="drc-cell-overlay"><div class="drc-cell-icon" style="background:${iconBg};">${icon}</div></div>` : ''}
-        </div>`;
-      }).join('');
-      return `<div class="drc-guess-row">
-        <div class="drc-guess-header">
-          <div class="drc-guess-label">Guess ${gi + 1} of ${MAX_GUESSES}</div>
-          <div class="drc-guess-score" style="color:${guessScoreColor};">${guessCorrect}/${currentRoute.stop_count}</div>
-        </div>
-        <div class="drc-guess-cells">${cells}</div>
-      </div>`;
-    }).join('');
-
-    // Share emoji grid
+    // Emoji grid — one row per guess, one square per slot
     const shareEmoji = guessHistory.map(gh =>
       Array.from({ length: currentRoute.stop_count }, (_, i) => {
         const fb = gh.feedback[i];
         return FEEDBACK[fb]?.emoji ?? "⬜";
       }).join("")
     ).join("\n");
+
+    // All guesses on a single horizontal line, separated by thin dividers
+    const emojiBlocksHTML = guessHistory.map((gh, gi) =>
+      (gi > 0 ? '<div class="drc-emoji-guess-divider"></div>' : '') +
+      Array.from({ length: currentRoute.stop_count }, (_, i) => {
+        const fb = gh.feedback[i];
+        const col = fb === 'correct' ? '#4ade80' : fb === 'wrong_slot' ? '#facc15' : fb === 'decoy' ? '#f87171' : 'rgba(255,255,255,0.12)';
+        return `<div class="drc-emoji-sq" style="background:${col};"></div>`;
+      }).join('')
+    ).join('');
 
     // Streak metric — only for daily (home) plays
     const streakMetric = isDaily ? `
@@ -1355,79 +1348,61 @@ function render() {
     // Stored reaction
     const reactionStored = (loadStopFlags()['__route__' + currentRoute.id] || {}).reaction;
 
-    completionHTML = `<div class="completion-layout">
-      <!-- Map hero -->
-      <div class="drc-map-wrap"><div id="leaflet-map"></div></div>
+    // Time headline — two lines
+    const timeFormatted = formatTime(completionTime);
 
-      <!-- Perf band fused to map bottom -->
-      <div class="drc-perf-band">
-        <div class="drc-perf" style="color:${perfColor}">${perfLabel}</div>
-        <div class="drc-metrics">
-          <div class="drc-metric">
-            <div class="drc-metric-val">${guessUsed}<span class="drc-metric-of">/${MAX_GUESSES}</span></div>
-            <div class="drc-metric-label">guesses</div>
+    completionHTML = `<div class="completion-layout">
+
+      <!-- Stats hero -->
+      <div class="drc-stats-hero">
+        <div class="drc-stats-congrats">Congratulations!</div>
+        <div class="drc-stats-time">${timeFormatted ? `You completed your route in ${timeFormatted}` : 'You completed your route'}</div>
+        <div class="drc-stats-metrics">
+          <div class="drc-stat-box">
+            <div class="drc-stat-val">${guessUsed}</div>
+            <div class="drc-stat-sublabel">of ${MAX_GUESSES} guesses</div>
           </div>
-          <div class="drc-metric-divider"></div>
-          <div class="drc-metric">
-            <div class="drc-metric-val">${score}<span class="drc-metric-of">/${currentRoute.stop_count}</span></div>
-            <div class="drc-metric-label">correct</div>
+          <div class="drc-stat-divider"></div>
+          <div class="drc-stat-box">
+            <div class="drc-stat-val">${score}</div>
+            <div class="drc-stat-sublabel">of ${currentRoute.stop_count} locations</div>
           </div>
-          ${streakMetric}
+          <div class="drc-stat-divider"></div>
+          <div class="drc-stat-box">
+            <div class="drc-stat-val">1</div>
+            <div class="drc-stat-sublabel">current streak</div>
+          </div>
         </div>
       </div>
 
-      <!-- Guess history -->
-      <div class="drc-guess-history">${guessHistoryHTML}</div>
-
-      <!-- Share row -->
-      <div class="drc-share-row">
-        <div class="drc-share-grid">${shareEmoji}</div>
-        <button class="drc-share-copy" id="btn-copy">Copy</button>
+      <!-- Emoji squares -->
+      <div class="drc-emoji-row-wrap">
+        <div class="drc-emoji-row-single">${emojiBlocksHTML}</div>
       </div>
 
-      <!-- Stop list -->
-      <div class="drc-stop-list">
-        ${revealData.stops.map((s, i) => {
-          const correct = finalFeedback[i] === "correct";
-          return `<div class="drc-stop-item">
-            <div class="drc-stop-img-wrap">
-              <img src="${s.photo}" class="drc-stop-img" alt=""/>
-              <div class="drc-stop-badge ${correct ? 'drc-badge-correct' : 'drc-badge-wrong'}">${correct ? '✓' : '✗'}</div>
-            </div>
-            <div class="drc-stop-details">
-              <div class="drc-stop-num-label">Stop ${i + 1}</div>
-              <div class="drc-stop-name-label">${s.name}</div>
-              ${!correct && finalFeedback[i] !== undefined ? `<div class="drc-stop-your-guess">not placed correctly</div>` : ''}
-              ${finalFeedback[i] === undefined ? `<div class="drc-stop-your-guess">not answered</div>` : ''}
-            </div>
-          </div>`;
-        }).join('')}
-      </div>
-      <div class="drc-decoys">Decoys: ${revealData.decoy_names.join(', ')}</div>
-
-      <!-- Route blurb -->
-      ${revealData.blurb ? `<div class="drc-fact"><div class="drc-fact-text">${revealData.blurb}</div></div>` : ''}
-
-      <!-- Reactions -->
-      <div class="drc-reaction-prompt">Have you been here?</div>
-      <div class="drc-reactions">
-        ${[
-          { type: 'bucket',       icon: '🌟', label: 'Bucket list — adding it to my list'  },
-          { type: 'progress',     icon: '🗺️', label: 'In progress — still exploring'        },
-          { type: 'accomplished', icon: '✈️', label: 'Mission accomplished — been there'    },
-        ].map(({ type, icon, label }) => `
-          <button class="drc-reaction ${reactionStored === type ? 'drc-reaction-active' : ''}" data-reaction="${type}">
-            <span class="drc-reaction-icon">${icon}</span>
-            <span class="drc-reaction-label">${label}</span>
-            <span class="drc-reaction-check">✓</span>
-          </button>`).join('')}
+      <!-- 3 CTA pill buttons above map -->
+      <div class="drc-cta-bar">
+        <button class="drc-cta-btn drc-cta-share" id="btn-copy">Share results</button>
+        <button class="drc-cta-btn drc-cta-play" id="btn-menu">Play another route</button>
+        <button class="drc-cta-btn drc-cta-explore" id="btn-explore">Explore this route</button>
       </div>
 
-      <!-- Actions -->
-      <div class="drc-actions">
-        <button class="btn-retry" id="btn-retry">Retry</button>
-        <button class="btn-menu" id="btn-menu">← Back</button>
+      <!-- Map — flex:1, fills remaining space -->
+      <div class="drc-map-flex">
+        <div id="leaflet-map"></div>
       </div>
+
+    </div>
+
+    <!-- Below fold: itinerary embed (mobile only — desktop opens new tab) -->
+    <div class="drc-below-fold" id="drc-below-fold">
+      <iframe
+        id="drc-itinerary-frame"
+        src=""
+        style="width:100%;height:100vh;border:none;display:block;"
+        loading="lazy"
+        title="Route guide"
+      ></iframe>
     </div>`;
   }
 
@@ -1594,6 +1569,7 @@ function render() {
 
   // Layout
   if (revealed) {
+    document.getElementById('game-overlay').classList.add('revealed');
     app.innerHTML = completionHTML;
   } else if (isLandscape) {
     app.innerHTML = `
@@ -1698,6 +1674,28 @@ function render() {
   // Events
   document.getElementById("btn-retry")?.addEventListener("click",  () => startGame(currentRoute, playSource));
   document.getElementById("btn-menu")?.addEventListener("click",   goBack);
+  document.getElementById("btn-explore")?.addEventListener("click", () => {
+    // Derive itinerary URL: prefer route.explore_url, fallback to slug pattern
+    const exploreUrl = currentRoute.explore_url
+      || `${currentRoute.id}-itinerary.html`;
+    const isDesktop = !isMobile();
+    if (isDesktop) {
+      window.open(exploreUrl, '_blank', 'noopener');
+    } else {
+      // Reveal the below-fold iframe and scroll into it
+      const overlay = document.getElementById('game-overlay');
+      const below   = document.getElementById('drc-below-fold');
+      const frame   = document.getElementById('drc-itinerary-frame');
+      if (!below || !frame) return;
+      overlay.classList.remove('revealed');
+      overlay.style.overflowY = 'auto';
+      below.style.display = 'block';
+      if (!frame.src || frame.src === window.location.href) {
+        frame.src = exploreUrl;
+      }
+      requestAnimationFrame(() => below.scrollIntoView({ behavior: 'smooth' }));
+    }
+  });
   document.getElementById("btn-copy")?.addEventListener("click",   function() {
     const shareEmoji = guessHistory.map(gh =>
       Array.from({ length: currentRoute.stop_count }, (_, i) => {
@@ -1706,7 +1704,7 @@ function render() {
       }).join("")
     ).join("\n");
     const txt = `Roamer: ${currentRoute.name}\n${shareEmoji}`;
-    navigator.clipboard.writeText(txt).then(() => { this.textContent = "Copied!"; });
+    navigator.clipboard.writeText(txt).then(() => { this.textContent = "Copied!"; setTimeout(() => { this.textContent = "Share"; }, 2000); });
   });
   // Route reaction buttons
   document.querySelectorAll('.drc-reaction').forEach(btn => {
@@ -1872,6 +1870,7 @@ function openOverlay() {
 function closeOverlay() {
   const overlay = document.getElementById('game-overlay');
   overlay.classList.remove('active');
+  overlay.classList.remove('revealed');
   if (leafletMap) { leafletMap.remove(); leafletMap = null; }
 }
 function goBack() {
