@@ -85,6 +85,27 @@ function renderLightbox() {
     nameEl.textContent = '';
   }
 
+  // Decoy toggle button — not shown if confirmed eliminated or game revealed
+  const lbDecoyEl = document.getElementById('lb-decoy-btn');
+  if (lbDecoyEl) {
+    const isConfirmedElim = confirmedDecoyIdsGlobal.has(card.id);
+    const isFlagged = typeof userFlaggedDecoys !== 'undefined' && userFlaggedDecoys.has(card.id);
+
+    if (revealed || isConfirmedElim) {
+      lbDecoyEl.style.display = 'none';
+    } else if (isFlagged) {
+      lbDecoyEl.style.display = 'flex';
+      lbDecoyEl.textContent = '✕ Not a decoy';
+      lbDecoyEl.className = 'lb-decoy-btn lb-decoy-flagged';
+      lbDecoyEl.dataset.cardId = card.id;
+    } else {
+      lbDecoyEl.style.display = 'flex';
+      lbDecoyEl.textContent = 'Mark as Decoy';
+      lbDecoyEl.className = 'lb-decoy-btn';
+      lbDecoyEl.dataset.cardId = card.id;
+    }
+  }
+
   counter.textContent = `${lightboxIndex + 1} / ${cards.length}`;
 
   // Dots
@@ -135,10 +156,23 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('lb-close').addEventListener('click', closeLightbox);
   document.getElementById('lb-prev').addEventListener('click', () => lbStep(-1));
   document.getElementById('lb-next').addEventListener('click', () => lbStep(1));
-});
 
-document.addEventListener('DOMContentLoaded', () => {
-  document.getElementById('lb-close').addEventListener('click', closeLightbox);
-  document.getElementById('lb-prev').addEventListener('click', () => lbStep(-1));
-  document.getElementById('lb-next').addEventListener('click', () => lbStep(1));
+  // Decoy toggle
+  document.getElementById('lb-decoy-btn')?.addEventListener('click', () => {
+    if (lightboxIndex === null || !cards.length) return;
+    const card = cards[lightboxIndex];
+    if (typeof userFlaggedDecoys === 'undefined') return;
+    if (userFlaggedDecoys.has(card.id)) {
+      userFlaggedDecoys.delete(card.id);
+    } else {
+      userFlaggedDecoys.add(card.id);
+      // Deselect if it was armed
+      if (typeof selectedCard !== 'undefined' && selectedCard?.id === card.id) {
+        selectedCard = null;
+        if (typeof redrawGeoMap === 'function') redrawGeoMap();
+      }
+    }
+    renderLightbox();
+    if (typeof render === 'function') render();
+  });
 });

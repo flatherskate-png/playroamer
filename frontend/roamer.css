@@ -608,6 +608,25 @@ body {
 .floating-submit-btn:active {
   transform: scale(0.97);
 }
+.floating-submit-btn.floating-submit-btn-inactive {
+  cursor: default;
+  color: var(--text-3);
+  border-color: rgba(255,255,255,0.1);
+  background: rgba(10, 18, 36, 0.72);
+  box-shadow:
+    0 0 0 1px rgba(255,255,255,0.04),
+    0 4px 16px rgba(0,0,0,0.4);
+}
+.floating-submit-btn.floating-submit-btn-inactive:hover {
+  background: rgba(10, 18, 36, 0.72);
+  border-color: rgba(255,255,255,0.1);
+  box-shadow:
+    0 0 0 1px rgba(255,255,255,0.04),
+    0 4px 16px rgba(0,0,0,0.4);
+}
+.floating-submit-btn.floating-submit-btn-inactive:active {
+  transform: none;
+}
 .floating-submit-arrow {
   font-size: 1rem;
   line-height: 1;
@@ -818,6 +837,47 @@ body {
   color: #f87171; pointer-events: none; white-space: nowrap;
 }
 .lb-elim-banner.visible { display: flex; }
+
+/* Lightbox decoy toggle button — overlaid on photo, bottom-center */
+.lb-decoy-btn {
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 18px;
+  border-radius: 100px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  background: rgba(6,10,18,0.78);
+  border: 1px solid rgba(255,255,255,0.18);
+  color: var(--text-2);
+  cursor: pointer;
+  z-index: 3;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+  -webkit-tap-highlight-color: transparent;
+  white-space: nowrap;
+  backdrop-filter: blur(4px);
+}
+.lb-decoy-btn:hover {
+  background: rgba(154,52,18,0.35);
+  border-color: rgba(251,146,60,0.6);
+  color: #fb923c;
+}
+.lb-decoy-btn.lb-decoy-flagged {
+  background: rgba(154,52,18,0.7);
+  border-color: #fb923c;
+  color: #fb923c;
+}
+.lb-decoy-btn.lb-decoy-flagged:hover {
+  background: rgba(154,52,18,0.35);
+  border-color: rgba(251,146,60,0.4);
+  color: var(--text-2);
+}
 .lb-name {
   position: absolute; bottom: 24px; left: 0; right: 0;
   text-align: center; font-size: 0.75rem; color: var(--text-3); letter-spacing: 0.06em;
@@ -1157,7 +1217,7 @@ body {
 .mt-feat-hint {
   position: absolute;
   bottom: 10px;
-  right: 10px;
+  left: 10px;
   font-size: 0.68rem;
   color: var(--cyan);
   background: rgba(6,10,18,0.78);
@@ -1166,33 +1226,53 @@ body {
   padding: 4px 10px;
   pointer-events: none;
   white-space: nowrap;
+  z-index: 5;
 }
 
-/* Decoy? flag button */
+/* "Mark as decoy" flag button */
 .mt-decoy-btn {
   position: absolute;
   bottom: 8px;
   right: 8px;
-  padding: 4px 10px;
+  padding: 5px 11px;
   border-radius: 100px;
-  font-size: 0.65rem;
+  font-size: 0.68rem;
   font-weight: 500;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.04em;
   background: rgba(6,10,18,0.78);
-  border: 1px solid rgba(255,255,255,0.15);
+  border: 1px solid rgba(255,255,255,0.18);
   color: var(--text-2);
   cursor: pointer;
   z-index: 4;
   -webkit-tap-highlight-color: transparent;
-  transition: background 0.15s, border-color 0.15s;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
 }
-.mt-decoy-btn:active {
-  background: rgba(154,52,18,0.5);
+/* Brighter when the card is armed/selected */
+.mt-decoy-btn.mt-decoy-btn-active {
+  background: rgba(154,52,18,0.25);
+  border-color: rgba(251,146,60,0.6);
+  color: #fb923c;
+}
+.mt-decoy-btn:not(.mt-decoy-btn-flagged):hover,
+.mt-decoy-btn:not(.mt-decoy-btn-flagged):active {
+  background: rgba(154,52,18,0.45);
   border-color: #fb923c;
   color: #fb923c;
 }
+/* "Not a decoy" unflag state */
+.mt-decoy-btn.mt-decoy-btn-flagged {
+  background: rgba(154,52,18,0.7);
+  border-color: #fb923c;
+  color: #fb923c;
+}
+.mt-decoy-btn.mt-decoy-btn-flagged:hover,
+.mt-decoy-btn.mt-decoy-btn-flagged:active {
+  background: rgba(154,52,18,0.4);
+  border-color: rgba(251,146,60,0.5);
+  color: var(--text-2);
+}
 
-/* Unflag button */
+/* Unflag button (legacy — kept for safety) */
 .mt-unflag-btn {
   position: absolute;
   bottom: 8px;
@@ -1231,6 +1311,38 @@ body {
 }
 
 /* Thumbnail strip */
+/* Mobile in-tray submit button */
+#mt-submit-slot {
+  padding: 6px 10px 2px;
+}
+.mt-submit-btn {
+  display: block;
+  width: 100%;
+  padding: 11px 20px;
+  border-radius: 100px;
+  border: 1px solid rgba(125,211,252,0.5);
+  background: rgba(10,18,36,0.82);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  color: var(--text);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.88rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  text-align: center;
+  box-shadow: 0 0 0 1px rgba(125,211,252,0.15), 0 0 24px rgba(125,211,252,0.15);
+  transition: background 0.2s, border-color 0.2s;
+  -webkit-tap-highlight-color: transparent;
+}
+.mt-submit-btn.mt-submit-btn-inactive {
+  cursor: default;
+  color: var(--text-3);
+  border-color: rgba(255,255,255,0.1);
+  background: rgba(10,18,36,0.6);
+  box-shadow: none;
+}
+
 .mt-strip {
   display: flex;
   flex-direction: row;

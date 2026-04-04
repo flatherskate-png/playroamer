@@ -1473,10 +1473,7 @@ function render() {
       </div>`;
     } else if (fcIsUserDecoy) {
       featBorder = '#fb923c';
-      featOverlayHTML = `<div class="mt-feat-overlay mt-feat-userdecoy">
-        <div class="mt-feat-badge mt-badge-userdecoy">DECOY?</div>
-        <button class="mt-unflag-btn" data-unflag="${fc.id}">✕ unflag</button>
-      </div>`;
+      featOverlayHTML = `<div class="mt-feat-overlay mt-feat-userdecoy"></div>`;
     } else if (fcIsPlaced) {
       featBorder = 'rgba(125,211,252,0.5)';
       featOverlayHTML = `<div class="mt-feat-overlay mt-feat-placed">
@@ -1490,9 +1487,16 @@ function render() {
       featBorder = 'var(--border)';
     }
 
-    // Decoy flag button — shown when not locked, not already flagged, not eliminated
-    const decoyBtnHTML = (!fcLocked && !fcIsElim && !fcIsUserDecoy && !fcIsPlaced)
-      ? `<button class="mt-decoy-btn" data-decoy-flag="${fc.id}">decoy?</button>` : '';
+    // Decoy flag button — shown when not locked, not eliminated
+    // Unflagged: "Mark as Decoy". Flagged (orange): "✕ Not a decoy".
+    let decoyBtnHTML = '';
+    if (!fcLocked && !fcIsElim) {
+      if (fcIsUserDecoy) {
+        decoyBtnHTML = `<button class="mt-decoy-btn mt-decoy-btn-flagged" data-unflag="${fc.id}">✕ Not a decoy</button>`;
+      } else {
+        decoyBtnHTML = `<button class="mt-decoy-btn${fcIsSelected ? ' mt-decoy-btn-active' : ''}" data-decoy-flag="${fc.id}">Mark as Decoy</button>`;
+      }
+    }
 
     // Expand button
     const featIdx = cards.indexOf(fc);
@@ -1581,6 +1585,7 @@ function render() {
           ${expandBtn}
         </div>
       </div>
+      <div id="mt-submit-slot"></div>
       <div class="mt-strip" id="mt-strip">
         ${thumbsHTML}
       </div>
@@ -1610,8 +1615,25 @@ function render() {
         ${mapContentHTML}
       </div>
       ${mobileTrayHTML}
-      <div id="ob-hint-slot"></div>
       ${historyHTML}`;
+    // Hint slot on mobile is fixed above the tray.
+    // app.innerHTML wipes the DOM on every render, so we must re-inject every time.
+    // Remove any stale one first, then append fresh to game-overlay.
+    const staleHint = document.getElementById('ob-hint-slot');
+    if (staleHint) staleHint.remove();
+    const hintSlot = document.createElement('div');
+    hintSlot.id = 'ob-hint-slot';
+    hintSlot.className = 'ob-hint-slot-mobile-fixed';
+    document.getElementById('game-overlay').appendChild(hintSlot);
+    // Position it just above the tray after layout settles
+    requestAnimationFrame(() => {
+      const tray = document.getElementById('mt-tray');
+      if (tray) {
+        const trayTop = tray.getBoundingClientRect().top;
+        const overlayTop = document.getElementById('game-overlay').getBoundingClientRect().top;
+        hintSlot.style.bottom = (window.innerHeight - trayTop + 8) + 'px';
+      }
+    });
   } else {
     app.innerHTML = `
       <div class="play-desktop-row">
@@ -1629,29 +1651,48 @@ function render() {
   }
 
   // Floating submit button — inject once, update on every render
-  let floatWrap = document.getElementById('floating-submit');
-  if (!floatWrap) {
-    floatWrap = document.createElement('div');
-    floatWrap.id = 'floating-submit';
-    floatWrap.className = 'floating-submit';
-    floatWrap.innerHTML = `
-      <button class="floating-submit-btn" id="floating-submit-btn">
-        Submit Guess ${guessNum} <span class="floating-submit-arrow">→</span>
-      </button>`;
-    document.getElementById('game-overlay').appendChild(floatWrap);
-    document.getElementById('floating-submit-btn').addEventListener('click', async () => {
-      if (allSlotsFilled()) await checkAnswers();
-    });
+  // Submit button — in-tray on mobile, fixed floater on desktop
+  const slotsRemaining = currentRoute.stop_count - Object.keys(assignments).filter(i => assignments[i]).length;
+  const submitLabel = filled
+    ? `Submit Guess ${guessNum} <span class="floating-submit-arrow">→</span>`
+    : `Place ${slotsRemaining} more to submit`;
+
+  if (isMobile() && !revealed) {
+    // Inject into the tray slot (normal flow, no overlap)
+    const mtSlot = document.getElementById('mt-submit-slot');
+    if (mtSlot) {
+      mtSlot.innerHTML = `<button class="mt-submit-btn${filled ? '' : ' mt-submit-btn-inactive'}" id="mt-submit-btn">${submitLabel}</button>`;
+      mtSlot.querySelector('#mt-submit-btn')?.addEventListener('click', async () => {
+        if (allSlotsFilled()) await checkAnswers();
+      });
+    }
+    // Hide the floating version on mobile
+    const floatWrap = document.getElementById('floating-submit');
+    if (floatWrap) floatWrap.classList.remove('visible');
   } else {
-    // Update label for subsequent guesses
+    // Desktop/landscape: use the fixed floater
+    let floatWrap = document.getElementById('floating-submit');
+    if (!floatWrap) {
+      floatWrap = document.createElement('div');
+      floatWrap.id = 'floating-submit';
+      floatWrap.className = 'floating-submit';
+      floatWrap.innerHTML = `<button class="floating-submit-btn" id="floating-submit-btn"></button>`;
+      document.getElementById('game-overlay').appendChild(floatWrap);
+      document.getElementById('floating-submit-btn').addEventListener('click', async () => {
+        if (allSlotsFilled()) await checkAnswers();
+      });
+    }
     const fbtn = document.getElementById('floating-submit-btn');
-    if (fbtn) fbtn.innerHTML = `Submit Guess ${guessNum} <span class="floating-submit-arrow">→</span>`;
-  }
-  // Show/hide based on whether all slots are filled
-  if (filled && !revealed) {
-    floatWrap.classList.add('visible');
-  } else {
-    floatWrap.classList.remove('visible');
+    if (fbtn) {
+      fbtn.innerHTML = submitLabel;
+      fbtn.classList.toggle('floating-submit-btn-inactive', !filled);
+      fbtn.disabled = !filled;
+    }
+    if (!revealed) {
+      floatWrap.classList.add('visible');
+    } else {
+      floatWrap.classList.remove('visible');
+    }
   }
 
   // Events
@@ -1711,7 +1752,7 @@ function render() {
   });
 
   // Decoy flag button
-  document.querySelectorAll('.mt-decoy-btn').forEach(btn => {
+  document.querySelectorAll('.mt-decoy-btn:not(.mt-decoy-btn-flagged)').forEach(btn => {
     btn.addEventListener('click', e => {
       e.stopPropagation();
       const id = btn.dataset.decoyFlag;
@@ -1722,8 +1763,8 @@ function render() {
     });
   });
 
-  // Unflag button
-  document.querySelectorAll('.mt-unflag-btn').forEach(btn => {
+  // Unflag button (both old mt-unflag-btn and new mt-decoy-btn-flagged)
+  document.querySelectorAll('.mt-unflag-btn, .mt-decoy-btn-flagged').forEach(btn => {
     btn.addEventListener('click', e => {
       e.stopPropagation();
       const id = btn.dataset.unflag;
@@ -1806,6 +1847,10 @@ function render() {
       setTimeout(() => startGeoAnimation(), 50);
     } else if (!geoAnimating) {
       redrawGeoMap();
+    }
+    // Trigger expand pulse hint after first render of the game (onboarding guards against repeat)
+    if (typeof window.obHint_pulseExpand === 'function') {
+      window.obHint_pulseExpand();
     }
   }
 }
