@@ -1,0 +1,666 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Italian Riviera to Amalfi — Roamer Route Guide</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300;1,400&family=Jost:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --cream: #fdf8f2;
+  --ink:   #1a1510;
+  --dusk:  #2a1f3d;
+  --ocean: #1a3a5c;
+  --fog:   #8fa8be;
+  --gold:  #c9a85c;
+  --rust:  #b85c3a;
+  --sage:  #7a9e87;
+}
+
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--cream);
+  color: var(--ink);
+  font-family: 'Jost', sans-serif;
+  font-weight: 300;
+  overflow-x: hidden;
+}
+
+.hero {
+  position: relative;
+  height: 100vh;
+  min-height: 600px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  overflow: hidden;
+}
+.hero-bg {
+  position: absolute; inset: 0;
+  background: url('https://images.unsplash.com/photo-1584799134788-f8c2c13a33c7?q=80&w=1752&auto=format&fit=crop') center 55% / cover no-repeat;
+  animation: slowZoom 20s ease-in-out infinite alternate;
+}
+@keyframes slowZoom {
+  from { transform: scale(1.0); }
+  to   { transform: scale(1.06); }
+}
+.hero-overlay {
+  position: absolute; inset: 0;
+  background: linear-gradient(to bottom,
+    rgba(26,21,16,0.02) 0%,
+    rgba(26,21,16,0.08) 45%,
+    rgba(26,21,16,0.78) 75%,
+    rgba(26,21,16,0.93) 100%);
+}
+.hero-content {
+  position: relative; z-index: 2;
+  padding: clamp(36px,5vw,72px) clamp(28px,6vw,80px);
+  max-width: 820px;
+}
+.route-badge {
+  display: inline-flex; align-items: center; gap: 10px;
+  font-size: 0.68rem; font-weight: 500;
+  letter-spacing: 0.2em; text-transform: uppercase;
+  color: var(--gold); margin-bottom: 18px;
+}
+.route-badge::before {
+  content: ''; display: block;
+  width: 22px; height: 1px; background: var(--gold);
+}
+.hero h1 {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: clamp(3.2rem, 8vw, 7rem);
+  font-weight: 300; line-height: 0.9;
+  color: var(--cream); letter-spacing: -0.01em;
+  margin-bottom: 28px;
+}
+.hero h1 em { font-style: italic; color: rgba(245,237,224,0.58); }
+.hero-meta { display: flex; gap: 32px; flex-wrap: wrap; }
+.hero-stat { display: flex; flex-direction: column; gap: 3px; }
+.hero-stat .num {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 1.85rem; font-weight: 300;
+  color: var(--cream); line-height: 1;
+}
+.hero-stat .lbl {
+  font-size: 0.65rem; font-weight: 500;
+  letter-spacing: 0.15em; text-transform: uppercase;
+  color: var(--fog);
+}
+.scroll-cue {
+  position: absolute; bottom: 32px; right: clamp(28px,6vw,80px);
+  z-index: 2; display: flex; flex-direction: column;
+  align-items: center; gap: 8px;
+  color: rgba(245,237,224,0.4); font-size: 0.62rem;
+  letter-spacing: 0.15em; text-transform: uppercase;
+  animation: fadeIn 2s 1.2s both;
+}
+.scroll-cue .drip {
+  width: 1px; height: 44px;
+  background: linear-gradient(to bottom, transparent, rgba(245,237,224,0.4));
+  animation: drip 2.4s 1.4s ease-in-out infinite;
+}
+@keyframes drip {
+  0%,100% { transform: scaleY(1); opacity: 0.4; }
+  55% { transform: scaleY(1.35); opacity: 0.9; }
+}
+@keyframes fadeIn { from { opacity:0; } to { opacity:1; } }
+
+.intro {
+  max-width: 740px;
+  margin: 80px auto 0;
+  padding: 0 clamp(24px,5vw,60px);
+}
+.intro p {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: clamp(1.3rem, 2.6vw, 1.75rem);
+  font-weight: 300; line-height: 1.68;
+  color: var(--ocean);
+}
+.intro p strong { font-weight: 400; color: var(--rust); }
+
+.map-section {
+  margin: 64px auto;
+  max-width: 980px;
+  padding: 0 clamp(24px,5vw,60px);
+}
+.eyebrow {
+  font-size: 0.66rem; font-weight: 500;
+  letter-spacing: 0.2em; text-transform: uppercase;
+  color: var(--fog); margin-bottom: 14px;
+  display: flex; align-items: center; gap: 12px;
+}
+.eyebrow::after {
+  content: ''; flex: 1; height: 1px;
+  background: linear-gradient(to right, rgba(143,168,190,0.35), transparent);
+}
+#overview-map {
+  width: 100%; height: 340px;
+  border-radius: 3px; overflow: hidden;
+  border: 1px solid rgba(42,31,61,0.09);
+}
+
+.stops-heading {
+  max-width: 980px; margin: 0 auto 52px;
+  padding: 0 clamp(24px,5vw,60px);
+}
+.stops-heading h2 {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: clamp(2rem,4vw,2.9rem);
+  font-weight: 300; color: var(--dusk); line-height: 1.1;
+}
+
+.stop-card {
+  max-width: 980px; margin: 0 auto;
+  padding: 0 clamp(24px,5vw,60px);
+  opacity: 0; transform: translateY(20px);
+  transition: opacity 0.65s ease, transform 0.65s ease;
+}
+.stop-card.visible { opacity: 1; transform: none; }
+
+.stop-photo {
+  position: relative;
+  width: 100%;
+  height: clamp(240px, 40vw, 460px);
+  overflow: hidden;
+  border-radius: 3px 3px 0 0;
+}
+.stop-photo img {
+  width: 100%; height: 100%;
+  object-fit: cover; display: block;
+  transition: transform 0.7s ease;
+}
+.stop-card:hover .stop-photo img { transform: scale(1.03); }
+.stop-photo-overlay {
+  position: absolute; inset: 0;
+  background: linear-gradient(to bottom,
+    rgba(26,21,16,0) 45%,
+    rgba(26,21,16,0.55) 100%);
+  pointer-events: none;
+}
+.stop-ghost-num {
+  position: absolute; top: 14px; right: 20px;
+  font-family: 'Cormorant Garamond', serif;
+  font-size: clamp(3.2rem,7vw,5.5rem);
+  font-weight: 300; color: rgba(245,237,224,0.5);
+  line-height: 1; pointer-events: none; z-index: 2;
+  letter-spacing: -0.02em;
+}
+.stop-photo-tag {
+  position: absolute; bottom: 16px; left: 20px;
+  font-size: 0.63rem; font-weight: 600;
+  letter-spacing: 0.2em; text-transform: uppercase;
+  color: var(--gold); z-index: 2;
+}
+.stop-body {
+  background: var(--dusk);
+  padding: clamp(26px,3.5vw,44px) clamp(22px,4vw,48px);
+  border-radius: 0 0 3px 3px;
+}
+.stop-body h3 {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: clamp(1.65rem,3.2vw,2.3rem);
+  font-weight: 300; color: var(--cream);
+  line-height: 1.12; margin-bottom: 12px;
+}
+.stop-body .tagline {
+  font-family: 'Cormorant Garamond', serif;
+  font-style: italic; font-size: 1.03rem;
+  color: rgba(245,237,224,0.48);
+  line-height: 1.55; margin-bottom: 16px;
+}
+.stop-body p.desc {
+  font-size: 0.87rem; line-height: 1.8;
+  color: rgba(245,237,224,0.68);
+  font-weight: 300; margin-bottom: 22px;
+  max-width: 72ch;
+}
+.fact-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip {
+  font-size: 0.69rem; font-weight: 400;
+  letter-spacing: 0.05em; color: var(--fog);
+  border: 1px solid rgba(143,168,190,0.22);
+  padding: 5px 12px; border-radius: 100px;
+  background: rgba(143,168,190,0.05);
+}
+.chip.gold {
+  color: var(--gold);
+  border-color: rgba(201,168,92,0.28);
+  background: rgba(201,168,92,0.06);
+}
+
+.connector {
+  max-width: 980px; margin: 0 auto;
+  padding: 0 clamp(24px,5vw,60px);
+}
+.connector-inner {
+  border-left: 1px solid rgba(201,168,92,0.28);
+  margin-left: 10px;
+  padding: 30px 0 30px 32px;
+  position: relative;
+}
+.connector-inner::before {
+  content: '';
+  position: absolute; top: 30px; left: -5px;
+  width: 9px; height: 9px; border-radius: 50%;
+  background: var(--gold);
+  box-shadow: 0 0 8px rgba(201,168,92,0.4);
+}
+.connector-inner::after {
+  content: '';
+  position: absolute; bottom: 30px; left: -5px;
+  width: 9px; height: 9px; border-radius: 50%;
+  background: rgba(201,168,92,0.3);
+  border: 1px solid var(--gold);
+}
+.connector-drive {
+  display: flex; align-items: baseline; gap: 10px;
+  margin-bottom: 20px;
+}
+.drive-time {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 1.3rem; font-weight: 300;
+  color: var(--dusk); line-height: 1;
+}
+.drive-detail { font-size: 0.71rem; color: var(--fog); letter-spacing: 0.06em; }
+.sq-label {
+  font-size: 0.62rem; font-weight: 600;
+  letter-spacing: 0.2em; text-transform: uppercase;
+  color: var(--rust); margin-bottom: 12px;
+}
+.sidequests { display: flex; flex-wrap: wrap; gap: 10px; }
+.sidequest {
+  display: flex; align-items: flex-start; gap: 10px;
+  background: #f5ede8;
+  border: 1px solid rgba(184,92,58,0.13);
+  border-radius: 3px;
+  padding: 10px 14px;
+  width: clamp(200px, 28%, 260px);
+}
+.sq-icon { font-size: 1rem; line-height: 1; margin-top: 1px; flex-shrink: 0; }
+.sq-name { font-size: 0.79rem; font-weight: 500; color: var(--ink); line-height: 1.25; margin-bottom: 3px; }
+.sq-note { font-size: 0.69rem; color: #7a5a4a; font-weight: 300; line-height: 1.45; }
+
+.practical {
+  background: var(--dusk);
+  padding: 72px clamp(24px,6vw,80px);
+  margin-top: 72px;
+}
+.practical-inner { max-width: 980px; margin: 0 auto; }
+.practical h2 {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: clamp(2rem,4vw,2.8rem);
+  font-weight: 300; color: var(--cream);
+  margin-bottom: 48px; line-height: 1.1;
+}
+.practical-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px,1fr));
+  gap: 32px;
+}
+.pcard { border-left: 1px solid rgba(201,168,92,0.3); padding-left: 20px; }
+.pcard-title {
+  font-size: 0.67rem; font-weight: 600;
+  letter-spacing: 0.18em; text-transform: uppercase;
+  color: var(--gold); margin-bottom: 10px;
+}
+.pcard p { font-size: 0.86rem; line-height: 1.75; color: rgba(245,237,224,0.62); font-weight: 300; }
+
+footer { background: var(--ink); padding: 36px; text-align: center; }
+.footer-wm {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 1.35rem; font-weight: 300;
+  color: rgba(245,237,224,0.3); letter-spacing: 0.1em; margin-bottom: 6px;
+}
+.footer-sub { font-size: 0.65rem; letter-spacing: 0.14em; text-transform: uppercase; color: rgba(245,237,224,0.15); }
+
+.leaflet-tooltip {
+  background: #2a1f3d !important;
+  border: 1px solid rgba(201,168,92,0.3) !important;
+  box-shadow: none !important;
+  border-radius: 2px !important;
+  padding: 0 !important;
+}
+.leaflet-tooltip::before { display: none !important; }
+
+@media (max-width: 560px) {
+  .sidequest { width: 100%; }
+  .hero-meta { gap: 20px; }
+}
+</style>
+</head>
+<body>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-bg"></div>
+  <div class="hero-overlay"></div>
+  <div class="hero-content">
+    <div class="route-badge">Roamer Route Guide</div>
+    <h1>Italian<br>Riviera<br><em>to Amalfi</em></h1>
+    <div class="hero-meta">
+      <div class="hero-stat"><span class="num">620</span><span class="lbl">Miles, Genoa to Positano</span></div>
+      <div class="hero-stat"><span class="num">6</span><span class="lbl">Iconic Stops</span></div>
+      <div class="hero-stat"><span class="num">2–3</span><span class="lbl">Weeks Recommended</span></div>
+      <div class="hero-stat"><span class="num">1</span><span class="lbl">Country, Infinite Pasta</span></div>
+    </div>
+  </div>
+  <div class="scroll-cue"><div class="drip"></div>Scroll</div>
+</section>
+
+<!-- INTRO -->
+<section class="intro">
+  <p>Italy's western coastline runs from the fishing villages of Liguria all the way to the cliff-hung towns of the Amalfi Coast — <strong>620 miles of sea light, Renaissance cities, and food that makes every other country's cuisine feel apologetic.</strong> Drive it slowly. The speed limits on these roads are more of a suggestion anyway.</p>
+</section>
+
+<!-- MAP -->
+<section class="map-section">
+  <div class="eyebrow">The Route</div>
+  <div id="overview-map"></div>
+</section>
+
+<!-- STOPS HEADING -->
+<div class="stops-heading">
+  <h2>Six stops.<br>One long, beautiful descent.</h2>
+</div>
+
+
+<!-- ══ STOP 1 ══ -->
+<article class="stop-card">
+  <div class="stop-photo">
+    <img src="https://images.unsplash.com/photo-1757536814153-ff8347c5dead?q=80&w=1740&auto=format&fit=crop" alt="Genoa, Italy" loading="lazy">
+    <div class="stop-photo-overlay"></div>
+    <div class="stop-ghost-num">01</div>
+    <div class="stop-photo-tag">Stop 01 · The Port City</div>
+  </div>
+  <div class="stop-body">
+    <h3>Genoa, Italy</h3>
+    <p class="tagline">The birthplace of Christopher Columbus, pesto, and a labyrinthine medieval port city that most tourists drive straight past on the way to Cinque Terre. Their loss.</p>
+    <p class="desc">Genoa is Italy's great undervisited city — a former maritime republic whose wealth built palaces so grand that the Rolli, a roster of aristocratic homes required to host visiting dignitaries, became a UNESCO World Heritage Site in its own right. The caruggi, the medieval alleyways of the old port district, are five centuries of compressed urban life: laundry lines overhead, workshops at street level, the smell of farinata baking in wood-fired ovens. The Palazzo Ducale, the Cattedrale di San Lorenzo, the Mercato Orientale. Spend two nights. Genoa rewards the visitor who doesn't rush to the next famous thing.</p>
+    <div class="fact-chips">
+      <span class="chip gold">Rolli Palaces: UNESCO World Heritage</span>
+      <span class="chip">Birthplace of Christopher Columbus, 1451</span>
+      <span class="chip">Pesto was codified here: 19th century</span>
+      <span class="chip">Old Port: redesigned by Renzo Piano, 1992</span>
+      <span class="chip">Don't miss: Mercato Orientale for breakfast</span>
+    </div>
+  </div>
+</article>
+
+<!-- CONNECTOR 1→2 -->
+<div class="connector"><div class="connector-inner">
+  <div class="connector-drive">
+    <span class="drive-time">1 hr 30 min southeast</span>
+    <span class="drive-detail">75 mi · A12 autostrada · or the coastal SS1 for scenery</span>
+  </div>
+  <div class="sq-label">Side Quests Along the Way</div>
+  <div class="sidequests">
+    <div class="sidequest"><span class="sq-icon">🏠</span><div><div class="sq-name">Cinque Terre</div><div class="sq-note">Five cliff-face fishing villages connected by hiking trails above the Ligurian Sea. Vernazza is the most beautiful; arrive by train to avoid the parking chaos. Crowded in summer — go early or in shoulder season.</div></div></div>
+    <div class="sidequest"><span class="sq-icon">🌿</span><div><div class="sq-name">Portofino</div><div class="sq-note">A tiny harbor village of pastel houses ringed by yachts and celebrity boats. The walk from Santa Margherita Ligure takes 45 minutes along the coast and is considerably more enjoyable than the traffic.</div></div></div>
+    <div class="sidequest"><span class="sq-icon">🍋</span><div><div class="sq-name">La Spezia</div><div class="sq-note">The working port at the southern end of the Riviera — unpretentious, good seafood, and the best base for Cinque Terre without the inflated accommodation prices.</div></div></div>
+  </div>
+</div></div>
+
+<!-- ══ STOP 2 ══ -->
+<article class="stop-card">
+  <div class="stop-photo">
+    <img src="https://images.unsplash.com/photo-1543429776-2782fc8e1acd?q=80&w=1740&auto=format&fit=crop" alt="Pisa, Italy" loading="lazy">
+    <div class="stop-photo-overlay"></div>
+    <div class="stop-ghost-num">02</div>
+    <div class="stop-photo-tag">Stop 02 · The Lean</div>
+  </div>
+  <div class="stop-body">
+    <h3>Pisa, Italy</h3>
+    <p class="tagline">The tower leans because the soil was too soft. It has been leaning for 840 years. Nobody has fixed it because, at this point, the lean is the point.</p>
+    <p class="desc">Pisa is consistently underestimated because of its most famous landmark — visitors arrive, photograph the tower at an angle, and leave. This is a mistake. The Campo dei Miracoli, the Piazza on which the tower stands, also contains a Romanesque cathedral of genuine magnificence and a baptistery whose acoustics are so perfect that a single singer can produce their own harmonic chord. The tower itself — begun in 1173, took 200 years to build due to repeated stoppages caused by the very lean it's famous for — is climable via 294 steps and gives a view over the Arno plain that most tourists never see. The university city beyond the Campo is also lovely: river walks, good aperitivo bars, and a pace entirely its own.</p>
+    <div class="fact-chips">
+      <span class="chip gold">Tower lean: 3.97 degrees off vertical</span>
+      <span class="chip">Construction: 1173–1372 (with long pauses)</span>
+      <span class="chip">Height: 183 ft / 56 m on the low side</span>
+      <span class="chip">UNESCO World Heritage since 1987</span>
+      <span class="chip">Tower climb: 294 steps, timed tickets required</span>
+    </div>
+  </div>
+</article>
+
+<!-- CONNECTOR 2→3 -->
+<div class="connector"><div class="connector-inner">
+  <div class="connector-drive">
+    <span class="drive-time">1 hr east</span>
+    <span class="drive-detail">50 mi · SGC FI-PI-LI · or the scenic SS67 via the Arno valley</span>
+  </div>
+  <div class="sq-label">Side Quests Along the Way</div>
+  <div class="sidequests">
+    <div class="sidequest"><span class="sq-icon">🍷</span><div><div class="sq-name">Chianti, Tuscany</div><div class="sq-note">The wine country between Florence and Siena — rolling hills of cypress and olive, small family vineyards, and the kind of afternoon that convinces you to stay another night.</div></div></div>
+    <div class="sidequest"><span class="sq-icon">🏰</span><div><div class="sq-name">Lucca, Tuscany</div><div class="sq-note">A completely intact Renaissance walled city where the walls are wide enough to cycle on top of. Puccini was born here. The tree-topped Torre Guinigi is delightfully improbable.</div></div></div>
+    <div class="sidequest"><span class="sq-icon">🌆</span><div><div class="sq-name">Siena, Tuscany</div><div class="sq-note">The red-brick rival to Florence, built on three hills around the extraordinary Piazza del Campo. The Palio horse race in July and August is chaotic and ancient and unmissable if you're here.</div></div></div>
+  </div>
+</div></div>
+
+<!-- ══ STOP 3 ══ -->
+<article class="stop-card">
+  <div class="stop-photo">
+    <img src="https://images.unsplash.com/photo-1476362174823-3a23f4aa6d76?q=80&w=1770&auto=format&fit=crop" alt="Florence, Italy" loading="lazy">
+    <div class="stop-photo-overlay"></div>
+    <div class="stop-ghost-num">03</div>
+    <div class="stop-photo-tag">Stop 03 · The Renaissance</div>
+  </div>
+  <div class="stop-body">
+    <h3>Florence, Italy</h3>
+    <p class="tagline">The city where the Renaissance happened, where it is still happening in every gallery, and where the queue for the David starts forming before the museum opens.</p>
+    <p class="desc">Florence is dense with genius in a way that can feel almost oppressive — every church has a Giotto fresco, every palazzo a Donatello relief, and the Uffizi Gallery alone contains more masterworks than most countries. The David at the Accademia is genuinely worth the queue; it is larger, more complex, and more emotionally present than any photograph prepares you for. Walk across the Ponte Vecchio at dawn before the goldsmiths open their shutters. Climb to Piazzale Michelangelo at sunset. Eat a bistecca Fiorentina somewhere that takes it seriously. Florence rewards multiple visits but delivers completely even on the first one.</p>
+    <div class="fact-chips">
+      <span class="chip gold">Uffizi: 13th–18th century masterworks</span>
+      <span class="chip">Michelangelo's David: 17 ft / 5.17 m tall</span>
+      <span class="chip">Historic centre: UNESCO since 1982</span>
+      <span class="chip">Best months: Apr–May, Sep–Oct</span>
+      <span class="chip">Don't miss: Bardini Gardens — quieter than Boboli</span>
+    </div>
+  </div>
+</article>
+
+<!-- CONNECTOR 3→4 -->
+<div class="connector"><div class="connector-inner">
+  <div class="connector-drive">
+    <span class="drive-time">3 hr south</span>
+    <span class="drive-detail">185 mi · A1 autostrada · or the Via Cassia through the Val d'Orcia</span>
+  </div>
+  <div class="sq-label">Side Quests Along the Way</div>
+  <div class="sidequests">
+    <div class="sidequest"><span class="sq-icon">🌅</span><div><div class="sq-name">Val d'Orcia, Tuscany</div><div class="sq-note">The UNESCO landscape of rolling golden hills, lone cypress trees, and fortified hilltowns that appears on every Italian calendar. The SS2 Via Cassia through Pienza and Montalcino is the right road.</div></div></div>
+    <div class="sidequest"><span class="sq-icon">🏊</span><div><div class="sq-name">Terme di Saturnia</div><div class="sq-note">Natural hot spring waterfalls in southern Tuscany, free to access at the cascate del mulino. Sulphurous and warm and full of very relaxed Italians.</div></div></div>
+    <div class="sidequest"><span class="sq-icon">🌋</span><div><div class="sq-name">Orvieto, Umbria</div><div class="sq-note">A hilltop city built on volcanic tufa with a Gothic cathedral facade so encrusted with mosaics and reliefs it looks like a jewellery box. The underground Etruscan tunnels are equally strange.</div></div></div>
+  </div>
+</div></div>
+
+<!-- ══ STOP 4 ══ -->
+<article class="stop-card">
+  <div class="stop-photo">
+    <img src="https://images.unsplash.com/photo-1596627118111-5b6c7890bc1b?q=80&w=1740&auto=format&fit=crop" alt="Rome, Italy" loading="lazy">
+    <div class="stop-photo-overlay"></div>
+    <div class="stop-ghost-num">04</div>
+    <div class="stop-photo-tag">Stop 04 · The Eternal City</div>
+  </div>
+  <div class="stop-body">
+    <h3>Rome, Italy</h3>
+    <p class="tagline">Two thousand years of uninterrupted occupation, every layer still visible, all of it slightly chaotic, none of it apologising.</p>
+    <p class="desc">Rome is not a city so much as a continuous accumulation — Etruscan, Republican, Imperial, Christian, Baroque, Fascist, contemporary — all piled on top of each other and somehow still functioning. The Colosseum and the Forum give you the Republic and the Empire in an afternoon. The Vatican Museums give you the Renaissance's greatest commission: the Sistine Chapel ceiling, painted by a sculptor who didn't want the job and produced a masterwork anyway. The Pantheon, open since 125 AD, still has the best unreinforced concrete dome in the world. Eat cacio e pepe at a table on a cobblestone street. Throw a coin in the Trevi. You're allowed. Give Rome at least four days; it will not be enough.</p>
+    <div class="fact-chips">
+      <span class="chip gold">Pantheon dome: unreinforced concrete, 125 AD</span>
+      <span class="chip">Vatican: smallest sovereign state on earth</span>
+      <span class="chip">Colosseum: completed 80 AD, held 50,000–80,000</span>
+      <span class="chip">Best months: Apr–May, Sep–Oct</span>
+      <span class="chip">Don't miss: Borghese Gallery (book ahead)</span>
+    </div>
+  </div>
+</article>
+
+<!-- CONNECTOR 4→5 -->
+<div class="connector"><div class="connector-inner">
+  <div class="connector-drive">
+    <span class="drive-time">2 hr 30 min south</span>
+    <span class="drive-detail">140 mi · A1 then A3 autostrada</span>
+  </div>
+  <div class="sq-label">Side Quests Along the Way</div>
+  <div class="sidequests">
+    <div class="sidequest"><span class="sq-icon">🌋</span><div><div class="sq-name">Pompeii & Herculaneum</div><div class="sq-note">The Roman cities buried by Vesuvius in 79 AD, preserved under ash for 1,700 years. Pompeii is vast and requires half a day; Herculaneum is smaller and better preserved. Do both if you can.</div></div></div>
+    <div class="sidequest"><span class="sq-icon">🏛️</span><div><div class="sq-name">Caserta, Campania</div><div class="sq-note">The Palazzo Reale di Caserta — built by the Bourbon kings of Naples to rival Versailles — has 1,200 rooms and gardens stretching 3km up a hillside. Outrageously undervisited.</div></div></div>
+    <div class="sidequest"><span class="sq-icon">🍕</span><div><div class="sq-name">Naples, Campania</div><div class="sq-note">The chaotic, magnificent city where pizza was invented and where it is still made better than anywhere else on earth. The National Archaeological Museum houses the finest Roman artefacts from Pompeii.</div></div></div>
+  </div>
+</div></div>
+
+<!-- ══ STOP 5 ══ -->
+<article class="stop-card">
+  <div class="stop-photo">
+    <img src="https://images.unsplash.com/photo-1610468959844-7b697b91bf7a?q=80&w=1748&auto=format&fit=crop" alt="Naples, Italy" loading="lazy">
+    <div class="stop-photo-overlay"></div>
+    <div class="stop-ghost-num">05</div>
+    <div class="stop-photo-tag">Stop 05 · The Capital of the South</div>
+  </div>
+  <div class="stop-body">
+    <h3>Naples, Italy</h3>
+    <p class="tagline">Loud, ancient, genuinely alarming in traffic, and home to the best pizza on earth. There is no contradiction here.</p>
+    <p class="desc">Naples is Italy without the veneer — raw, layered, and operating at a frequency that takes a day to tune into and a lifetime to fully understand. The historic centre, a UNESCO site since 1995, is built on a Greek grid from 470 BC with every subsequent civilisation stacked directly on top. The Spaccanapoli — the straight street that splits the city — is a kilometre of churches, workshops, and presepi (Nativity scene) artisans working in centuries-old tradition. Eat pizza at Da Michele or Sorbillo: a margherita or marinara, nothing else needed. The National Archaeological Museum houses the world's greatest collection of Roman antiquities. Vesuvius watches over all of it from across the bay, dormant since 1944, unlikely to stay that way forever.</p>
+    <div class="fact-chips">
+      <span class="chip gold">Historic centre: UNESCO, on Greek grid from 470 BC</span>
+      <span class="chip">Pizza Margherita: created here in 1889</span>
+      <span class="chip">Vesuvius last erupted: 1944</span>
+      <span class="chip">MANN: world's greatest Roman collection</span>
+      <span class="chip">Don't miss: Cappella Sansevero — the Veiled Christ</span>
+    </div>
+  </div>
+</article>
+
+<!-- CONNECTOR 5→6 -->
+<div class="connector"><div class="connector-inner">
+  <div class="connector-drive">
+    <span class="drive-time">1 hr 30 min south</span>
+    <span class="drive-detail">35 mi · SS163 Amalfitana — the most dramatic coastal road in Europe · drive it slowly, one eye on the road</span>
+  </div>
+  <div class="sq-label">Side Quests Along the Way</div>
+  <div class="sidequests">
+    <div class="sidequest"><span class="sq-icon">🍋</span><div><div class="sq-name">Sorrento</div><div class="sq-note">The clifftop town at the top of the peninsula — a good base and a good stop in its own right. The limoncello is made here with Sorrento lemons the size of softballs.</div></div></div>
+    <div class="sidequest"><span class="sq-icon">🏛️</span><div><div class="sq-name">Ravello</div><div class="sq-note">A hilltop village above Amalfi with the Villa Cimbrone gardens and a view over the coast that Gore Vidal, who lived here for decades, described as the most beautiful in the world.</div></div></div>
+    <div class="sidequest"><span class="sq-icon">🚢</span><div><div class="sq-name">Capri</div><div class="sq-note">The island 40 minutes by ferry from Sorrento. The Blue Grotto, the chairlift to Monte Solaro, the Gardens of Augustus. Expensive and worth it.</div></div></div>
+  </div>
+</div></div>
+
+<!-- ══ STOP 6 ══ -->
+<article class="stop-card">
+  <div class="stop-photo">
+    <img src="https://images.unsplash.com/photo-1584799134788-f8c2c13a33c7?q=80&w=1752&auto=format&fit=crop" alt="Positano, Italy" loading="lazy">
+    <div class="stop-photo-overlay"></div>
+    <div class="stop-ghost-num">06</div>
+    <div class="stop-photo-tag">Stop 06 · The Cliff Town</div>
+  </div>
+  <div class="stop-body">
+    <h3>Positano, Italy</h3>
+    <p class="tagline">Houses stacked vertically on a cliff face above an impossibly blue sea, connected by staircases, and priced accordingly.</p>
+    <p class="desc">Positano is the most photographed town on the Amalfi Coast and remains, despite this, genuinely beautiful — a near-vertical cascade of pink, white, and terracotta houses descending to a small beach of grey volcanic sand and water so clear you can see the bottom at ten metres. Steinbeck wrote about it in 1953: "a dream place that isn't quite real when you are there and becomes beckoningly real after you have gone." The beach is small and the town is steep — the main piazza is connected to the SS163 by 600 steps — but the view from any hotel terrace at breakfast, with the sea below and the Tyrrhenian light on the water, is the end point this entire drive has been building toward.</p>
+    <div class="fact-chips">
+      <span class="chip gold">Elevation change: 600 steps, road to beach</span>
+      <span class="chip">Population: 3,800 — outnumbered by visitors daily</span>
+      <span class="chip">SS163 Amalfitana: 40 km of hairpin coast road</span>
+      <span class="chip">Best months: May–Jun, Sep–Oct</span>
+      <span class="chip">Don't miss: sunrise from the terrace before the crowds</span>
+    </div>
+  </div>
+</article>
+
+
+<!-- PRACTICALITIES -->
+<section class="practical">
+  <div class="practical-inner">
+    <h2>Before you go.</h2>
+    <div class="practical-grid">
+      <div class="pcard">
+        <div class="pcard-title">Driving the Amalfitana</div>
+        <p>The SS163 between Sorrento and Amalfi is 40 kilometres of single-lane coastal road with hairpin bends, sheer drops, and a constant two-way flow of cars, buses, scooters, and pedestrians. It is breathtaking and terrifying in equal measure. Drive it yourself for the full experience, but leave the large rental car at the depot — the smallest vehicle available is the right vehicle. Buses and ferries also cover the route if you'd rather not.</p>
+      </div>
+      <div class="pcard">
+        <div class="pcard-title">The ZTL Problem</div>
+        <p>Italian historic city centres are Zona Traffico Limitato — restricted traffic zones where rental cars are automatically fined if they enter without a permit. Florence, Rome, and Naples all have them. The fines arrive weeks later to your rental company and are passed directly to you. Research the ZTL boundaries before driving into each city, park outside, and use public transport or walk. This is not optional advice.</p>
+      </div>
+      <div class="pcard">
+        <div class="pcard-title">When to Go</div>
+        <p>May, June, and September are the ideal months — warm enough for the coast, cool enough for the cities, and lighter on crowds than July and August. The Amalfi Coast in August is beautiful and genuinely packed: traffic on the SS163 can queue for an hour. October is excellent for the interior — Florence, Rome, Tuscany — though the sea starts to cool. Cinque Terre trails close periodically after rain; check before you hike.</p>
+      </div>
+      <div class="pcard">
+        <div class="pcard-title">Booking Ahead</div>
+        <p>The Uffizi, the Borghese Gallery, the Colosseum, and the Vatican Museums all require advance booking — the Borghese especially, which limits entry to 360 people per session and sells out weeks ahead. The Accademia in Florence for the David is similarly essential to pre-book in high season. Positano hotels book out months in advance for July and August. Plan more than you think you need to.</p>
+      </div>
+      <div class="pcard">
+        <div class="pcard-title">Trains vs. Driving</div>
+        <p>Italy's rail network is excellent between the major cities — Florence to Rome is 1.5 hours by Frecciarossa high-speed train, faster than driving. Consider driving only the scenic sections (the Ligurian coast, the Val d'Orcia detour, the Amalfitana) and using trains between cities. A rental picked up in Pisa and dropped in Naples, with trains for the long flat stretches, gives you the best of both.</p>
+      </div>
+      <div class="pcard">
+        <div class="pcard-title">What to Eat, Where</div>
+        <p>Genoa: pesto trofie and farinata. Cinque Terre: anchovies and focaccia col formaggio. Florence: bistecca Fiorentina and lampredotto from a market stall. Rome: cacio e pepe, carbonara, supplì. Naples: pizza margherita, sfogliatelle, ragù. Amalfi Coast: whatever came out of the water this morning, dressed with oil and lemon. The rule throughout is to eat where Italians eat, at the times Italians eat, which is later than you think.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="footer-wm">Roamer</div>
+  <div class="footer-sub">Daily Route Guides</div>
+</footer>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+
+  const stops = [
+    { name: "Genoa, Italy",    lat: 44.407260, lng:  8.933862 },
+    { name: "Pisa, Italy",     lat: 43.471472, lng: 10.679791 },
+    { name: "Florence, Italy", lat: 43.769796, lng: 11.255640 },
+    { name: "Rome, Italy",     lat: 41.893320, lng: 12.482932 },
+    { name: "Naples, Italy",   lat: 40.835885, lng: 14.248768 },
+    { name: "Positano, Italy", lat: 40.628658, lng: 14.485496 },
+  ];
+
+  const map = L.map('overview-map', {
+    zoomControl: true,
+    scrollWheelZoom: false,
+    attributionControl: false,
+  });
+
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    maxZoom: 14
+  }).addTo(map);
+
+  const latlngs = stops.map(s => [s.lat, s.lng]);
+  const poly = L.polyline(latlngs, {
+    color: '#c9a85c', weight: 2, opacity: 0.7, dashArray: '6,6'
+  }).addTo(map);
+
+  const goldIcon = L.divIcon({
+    className: '',
+    html: `<div style="width:9px;height:9px;background:#c9a85c;border-radius:50%;border:2px solid rgba(245,237,224,.75);box-shadow:0 0 7px rgba(201,168,92,.5)"></div>`,
+    iconSize: [9,9], iconAnchor: [4.5,4.5]
+  });
+
+  stops.forEach((s, i) => {
+    L.marker([s.lat, s.lng], { icon: goldIcon }).addTo(map)
+     .bindTooltip(
+       `<span style="font-family:Jost,sans-serif;font-size:12px;color:#f5ede0;padding:4px 8px;display:block">${i+1}. ${s.name}</span>`,
+       { direction: 'right' }
+     );
+  });
+
+  map.fitBounds(poly.getBounds(), { padding: [28,28] });
+
+  const cards = document.querySelectorAll('.stop-card');
+  const io = new IntersectionObserver(entries => {
+    entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible'); });
+  }, { threshold: 0.08 });
+  cards.forEach(c => io.observe(c));
+});
+</script>
+</body>
+</html>

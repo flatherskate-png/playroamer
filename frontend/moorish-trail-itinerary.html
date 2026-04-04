@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Moorish Trail — Roamer Route Guide</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300;1,400&family=Jost:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --cream: #fdf8f2;
+  --ink:   #1a1510;
+  --dusk:  #2a1f3d;
+  --ocean: #1a3a5c;
+  --fog:   #8fa8be;
+  --gold:  #c9a85c;
+  --rust:  #b85c3a;
+  --sage:  #7a9e87;
+}
+
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--cream);
+  color: var(--ink);
+  font-family: 'Jost', sans-serif;
+  font-weight: 300;
+  overflow-x: hidden;
+}
+
+.hero {
+  position: relative;
+  height: 100vh;
+  min-height: 600px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  overflow: hidden;
+}
+.hero-bg {
+  position: absolute; inset: 0;
+  background: url('https://images.unsplash.com/photo-1664346582394-1f38bdb31d02?q=80&w=1770&auto=format&fit=crop') center 50% / cover no-repeat;
+  animation: slowZoom 20s ease-in-out infinite alternate;
+}
+@keyframes slowZoom {
+  from { transform: scale(1.0); }
+  to   { transform: scale(1.06); }
+}
+.hero-overlay {
+  position: absolute; inset: 0;
+  background: linear-gradient(to bottom,
+    rgba(26,21,16,0.02) 0%,
+    rgba(26,21,16,0.08) 45%,
+    rgba(26,21,16,0.78) 75%,
+    rgba(26,21,16,0.93) 100%);
+}
+.hero-content {
+  position: relative; z-index: 2;
+  padding: clamp(36px,5vw,72px) clamp(28px,6vw,80px);
+  max-width: 820px;
+}
+.route-badge {
+  display: inline-flex; align-items: center; gap: 10px;
+  font-size: 0.68rem; font-weight: 500;
+  letter-spacing: 0.2em; text-transform: uppercase;
+  color: var(--gold); margin-bottom: 18px;
+}
+.route-badge::before {
+  content: ''; display: block;
+  width: 22px; height: 1px; background: var(--gold);
+}
+.hero h1 {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: clamp(3.2rem, 8vw, 7rem);
+  font-weight: 300; line-height: 0.9;
+  color: var(--cream); letter-spacing: -0.01em;
+  margin-bottom: 28px;
+}
+.hero h1 em { font-style: italic; color: rgba(245,237,224,0.58); }
+.hero-meta { display: flex; gap: 32px; flex-wrap: wrap; }
+.hero-stat { display: flex; flex-direction: column; gap: 3px; }
+.hero-stat .num {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 1.85rem; font-weight: 300;
+  color: var(--cream); line-height: 1;
+}
+.hero-stat .lbl {
+  font-size: 0.65rem; font-weight: 500;
+  letter-spacing: 0.15em; text-transform: uppercase;
+  color: var(--fog);
+}
+.scroll-cue {
+  position: absolute; bottom: 32px; right: clamp(28px,6vw,80px);
+  z-index: 2; display: flex; flex-direction: column;
+  align-items: center; gap: 8px;
+  color: rgba(245,237,224,0.4); font-size: 0.62rem;
+  letter-spacing: 0.15em; text-transform: uppercase;
+  animation: fadeIn 2s 1.2s both;
+}
+.scroll-cue .drip {
+  width: 1px; height: 44px;
+  background: linear-gradient(to bottom, transparent, rgba(245,237,224,0.4));
+  animation: drip 2.4s 1.4s ease-in-out infinite;
+}
+@keyframes drip {
+  0%,100% { transform: scaleY(1); opacity: 0.4; }
+  55% { transform: scaleY(1.35); opacity: 0.9; }
+}
+@keyframes fadeIn { from { opacity:0; } to { opacity:1; } }
+
+.intro {
+  max-width: 740px;
+  margin: 80px auto 0;
+  padding: 0 clamp(24px,5vw,60px);
+}
+.intro p {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: clamp(1.3rem, 2.6vw, 1.75rem);
+  font-weight: 300; line-height: 1.68;
+  color: var(--ocean);
+}
+.intro p strong { font-weight: 400; color: var(--rust); }
+
+.map-section {
+  margin: 64px auto;
+  max-width: 980px;
+  padding: 0 clamp(24px,5vw,60px);
+}
+.eyebrow {
+  font-size: 0.66rem; font-weight: 500;
+  letter-spacing: 0.2em; text-transform: uppercase;
+  color: var(--fog); margin-bottom: 14px;
+  display: flex; align-items: center; gap: 12px;
+}
+.eyebrow::after {
+  content: ''; flex: 1; height: 1px;
+  background: linear-gradient(to right, rgba(143,168,190,0.35), transparent);
+}
+#overview-map {
+  width: 100%; height: 340px;
+  border-radius: 3px; overflow: hidden;
+  border: 1px solid rgba(42,31,61,0.09);
+}
+
+.stops-heading {
+  max-width: 980px; margin: 0 auto 52px;
+  padding: 0 clamp(24px,5vw,60px);
+}
+.stops-heading h2 {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: clamp(2rem,4vw,2.9rem);
+  font-weight: 300; color: var(--dusk); line-height: 1.1;
+}
+
+.stop-card {
+  max-width: 980px; margin: 0 auto;
+  padding: 0 clamp(24px,5vw,60px);
+  opacity: 0; transform: translateY(20px);
+  transition: opacity 0.65s ease, transform 0.65s ease;
+}
+.stop-card.visible { opacity: 1; transform: none; }
+
+.stop-photo {
+  position: relative;
+  width: 100%;
+  height: clamp(240px, 40vw, 460px);
+  overflow: hidden;
+  border-radius: 3px 3px 0 0;
+}
+.stop-photo img {
+  width: 100%; height: 100%;
+  object-fit: cover; display: block;
+  transition: transform 0.7s ease;
+}
+.stop-card:hover .stop-photo img { transform: scale(1.03); }
+.stop-photo-overlay {
+  position: absolute; inset: 0;
+  background: linear-gradient(to bottom,
+    rgba(26,21,16,0) 45%,
+    rgba(26,21,16,0.55) 100%);
+  pointer-events: none;
+}
+.stop-ghost-num {
+  position: absolute; top: 14px; right: 20px;
+  font-family: 'Cormorant Garamond', serif;
+  font-size: clamp(3.2rem,7vw,5.5rem);
+  font-weight: 300; color: rgba(245,237,224,0.5);
+  line-height: 1; pointer-events: none; z-index: 2;
+  letter-spacing: -0.02em;
+}
+.stop-photo-tag {
+  position: absolute; bottom: 16px; left: 20px;
+  font-size: 0.63rem; font-weight: 600;
+  letter-spacing: 0.2em; text-transform: uppercase;
+  color: var(--gold); z-index: 2;
+}
+.stop-body {
+  background: var(--dusk);
+  padding: clamp(26px,3.5vw,44px) clamp(22px,4vw,48px);
+  border-radius: 0 0 3px 3px;
+}
+.stop-body h3 {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: clamp(1.65rem,3.2vw,2.3rem);
+  font-weight: 300; color: var(--cream);
+  line-height: 1.12; margin-bottom: 12px;
+}
+.stop-body .tagline {
+  font-family: 'Cormorant Garamond', serif;
+  font-style: italic; font-size: 1.03rem;
+  color: rgba(245,237,224,0.48);
+  line-height: 1.55; margin-bottom: 16px;
+}
+.stop-body p.desc {
+  font-size: 0.87rem; line-height: 1.8;
+  color: rgba(245,237,224,0.68);
+  font-weight: 300; margin-bottom: 22px;
+  max-width: 72ch;
+}
+.fact-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip {
+  font-size: 0.69rem; font-weight: 400;
+  letter-spacing: 0.05em; color: var(--fog);
+  border: 1px solid rgba(143,168,190,0.22);
+  padding: 5px 12px; border-radius: 100px;
+  background: rgba(143,168,190,0.05);
+}
+.chip.gold {
+  color: var(--gold);
+  border-color: rgba(201,168,92,0.28);
+  background: rgba(201,168,92,0.06);
+}
+
+.connector {
+  max-width: 980px; margin: 0 auto;
+  padding: 0 clamp(24px,5vw,60px);
+}
+.connector-inner {
+  border-left: 1px solid rgba(201,168,92,0.28);
+  margin-left: 10px;
+  padding: 30px 0 30px 32px;
+  position: relative;
+}
+.connector-inner::before {
+  content: '';
+  position: absolute; top: 30px; left: -5px;
+  width: 9px; height: 9px; border-radius: 50%;
+  background: var(--gold);
+  box-shadow: 0 0 8px rgba(201,168,92,0.4);
+}
+.connector-inner::after {
+  content: '';
+  position: absolute; bottom: 30px; left: -5px;
+  width: 9px; height: 9px; border-radius: 50%;
+  background: rgba(201,168,92,0.3);
+  border: 1px solid var(--gold);
+}
+.connector-drive {
+  display: flex; align-items: baseline; gap: 10px;
+  margin-bottom: 20px;
+}
+.drive-time {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 1.3rem; font-weight: 300;
+  color: var(--dusk); line-height: 1;
+}
+.drive-detail { font-size: 0.71rem; color: var(--fog); letter-spacing: 0.06em; }
+
+.connector-journey {
+  display: flex; align-items: flex-start; gap: 16px;
+  margin-bottom: 20px;
+}
+.journey-icon { font-size: 1.1rem; line-height: 1; margin-top: 2px; flex-shrink: 0; }
+.journey-time {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 1.3rem; font-weight: 300;
+  color: var(--dusk); line-height: 1;
+  margin-bottom: 3px;
+}
+.journey-detail { font-size: 0.71rem; color: var(--fog); letter-spacing: 0.06em; }
+.journey-note {
+  font-size: 0.75rem; font-weight: 300;
+  color: rgba(26,58,92,0.65);
+  margin-top: 5px; line-height: 1.5;
+  max-width: 55ch;
+}
+
+.sq-label {
+  font-size: 0.62rem; font-weight: 600;
+  letter-spacing: 0.2em; text-transform: uppercase;
+  color: var(--rust); margin-bottom: 12px;
+}
+.sidequests { display: flex; flex-wrap: wrap; gap: 10px; }
+.sidequest {
+  display: flex; align-items: flex-start; gap: 10px;
+  background: #f5ede8;
+  border: 1px solid rgba(184,92,58,0.13);
+  border-radius: 3px;
+  padding: 10px 14px;
+  width: clamp(200px, 28%, 260px);
+}
+.sq-icon { font-size: 1rem; line-height: 1; margin-top: 1px; flex-shrink: 0; }
+.sq-name { font-size: 0.79rem; font-weight: 500; color: var(--ink); line-height: 1.25; margin-bottom: 3px; }
+.sq-note { font-size: 0.69rem; color: #7a5a4a; font-weight: 300; line-height: 1.45; }
+
+.practical {
+  background: var(--dusk);
+  padding: 72px clamp(24px,6vw,80px);
+  margin-top: 72px;
+}
+.practical-inner { max-width: 980px; margin: 0 auto; }
+.practical h2 {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: clamp(2rem,4vw,2.8rem);
+  font-weight: 300; color: var(--cream);
+  margin-bottom: 48px; line-height: 1.1;
+}
+.practical-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px,1fr));
+  gap: 32px;
+}
+.pcard { border-left: 1px solid rgba(201,168,92,0.3); padding-left: 20px; }
+.pcard-title {
+  font-size: 0.67rem; font-weight: 600;
+  letter-spacing: 0.18em; text-transform: uppercase;
+  color: var(--gold); margin-bottom: 10px;
+}
+.pcard p { font-size: 0.86rem; line-height: 1.75; color: rgba(245,237,224,0.62); font-weight: 300; }
+
+footer { background: var(--ink); padding: 36px; text-align: center; }
+.footer-wm {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 1.35rem; font-weight: 300;
+  color: rgba(245,237,224,0.3); letter-spacing: 0.1em; margin-bottom: 6px;
+}
+.footer-sub { font-size: 0.65rem; letter-spacing: 0.14em; text-transform: uppercase; color: rgba(245,237,224,0.15); }
+
+.leaflet-tooltip {
+  background: #2a1f3d !important;
+  border: 1px solid rgba(201,168,92,0.3) !important;
+  box-shadow: none !important;
+  border-radius: 2px !important;
+  padding: 0 !important;
+}
+.leaflet-tooltip::before { display: none !important; }
+
+@media (max-width: 560px) {
+  .sidequest { width: 100%; }
+  .hero-meta { gap: 20px; }
+}
+</style>
+</head>
+<body>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-bg"></div>
+  <div class="hero-overlay"></div>
+  <div class="hero-content">
+    <div class="route-badge">Roamer Route Guide</div>
+    <h1>The<br>Moorish<br><em>Trail</em></h1>
+    <div class="hero-meta">
+      <div class="hero-stat"><span class="num">1,800</span><span class="lbl">Miles, Madrid to the Sahara</span></div>
+      <div class="hero-stat"><span class="num">6</span><span class="lbl">Iconic Stops</span></div>
+      <div class="hero-stat"><span class="num">2–3</span><span class="lbl">Weeks Recommended</span></div>
+      <div class="hero-stat"><span class="num">3</span><span class="lbl">Countries</span></div>
+    </div>
+  </div>
+  <div class="scroll-cue"><div class="drip"></div>Scroll</div>
+</section>
+
+<!-- INTRO -->
+<section class="intro">
+  <p>For seven centuries, Islamic civilisation shaped the Iberian Peninsula — its architecture, its food, its gardens, its mathematics. <strong>This route follows that inheritance</strong> from the grand avenues of Madrid, down through the tile-faced city of Lisbon, across the Strait of Gibraltar, and deep into Morocco until the road runs out at the edge of the Sahara.</p>
+</section>
+
+<!-- MAP -->
+<section class="map-section">
+  <div class="eyebrow">The Route</div>
+  <div id="overview-map"></div>
+</section>
+
+<!-- STOPS HEADING -->
+<div class="stops-heading">
+  <h2>Six stops.<br>Two continents, one inheritance.</h2>
+</div>
+
+
+<!-- ══ STOP 1 ══ -->
+<article class="stop-card">
+  <div class="stop-photo">
+    <img src="https://images.unsplash.com/photo-1539037116277-4db20889f2d4?q=80&w=1770&auto=format&fit=crop" alt="Madrid, Spain" loading="lazy">
+    <div class="stop-photo-overlay"></div>
+    <div class="stop-ghost-num">01</div>
+    <div class="stop-photo-tag">Stop 01 · The Capital</div>
+  </div>
+  <div class="stop-body">
+    <h3>Madrid, Spain</h3>
+    <p class="tagline">A city that eats dinner at 10pm, closes nothing before midnight, and has somehow built three of the world's great art museums within walking distance of each other.</p>
+    <p class="desc">Madrid sits at the geographic centre of the Iberian Peninsula — the highest capital city in the European Union — and operates with a confidence that comes from knowing it has been Spain's beating heart since 1561. The Golden Triangle of Art brings together the Prado, the Reina Sofía, and the Thyssen-Bornemisza within a few minutes' walk: Velázquez and Goya at the first, Picasso's Guernica at the second, and everything else at the third. Wander the Retiro park at noon. Eat pintxos in La Latina. Madrid rewards staying up late and sleeping late; adjust your schedule accordingly and the city opens completely.</p>
+    <div class="fact-chips">
+      <span class="chip gold">Elevation: 2,188 ft / 667 m — highest EU capital</span>
+      <span class="chip">Prado: 8,000 paintings in the collection</span>
+      <span class="chip">Retiro Park: 350 acres in the city centre</span>
+      <span class="chip">Best months: Apr–Jun, Sep–Oct</span>
+      <span class="chip">Don't miss: Guernica at Reina Sofía</span>
+    </div>
+  </div>
+</article>
+
+<!-- CONNECTOR 1→2 -->
+<div class="connector"><div class="connector-inner">
+  <div class="connector-drive">
+    <span class="drive-time">6 hr west</span>
+    <span class="drive-detail">390 mi · A-5 motorway to Lisbon</span>
+  </div>
+  <div class="sq-label">Side Quests Along the Way</div>
+  <div class="sidequests">
+    <div class="sidequest"><span class="sq-icon">🏰</span><div><div class="sq-name">Toledo, Spain</div><div class="sq-note">An hour south of Madrid, a medieval walled city on a granite hill where Christian, Muslim, and Jewish cultures coexisted for centuries. El Greco lived and painted here. Half a day minimum.</div></div></div>
+    <div class="sidequest"><span class="sq-icon">🦅</span><div><div class="sq-name">Mérida, Spain</div><div class="sq-note">Roman Emerita Augusta — the best-preserved Roman theatre in Spain, still used for performances in summer. The archaeological museum is genuinely world-class.</div></div></div>
+    <div class="sidequest"><span class="sq-icon">🍷</span><div><div class="sq-name">Évora, Portugal</div><div class="sq-note">A walled Alentejo town with a Roman temple, a Gothic cathedral, and a bone chapel that is exactly as unsettling as it sounds. Portugal's quietest great city.</div></div></div>
+  </div>
+</div></div>
+
+<!-- ══ STOP 2 ══ -->
+<article class="stop-card">
+  <div class="stop-photo">
+    <img src="https://images.unsplash.com/photo-1599069158346-684fee0e414a?q=80&w=1770&auto=format&fit=crop" alt="Lisbon, Portugal" loading="lazy">
+    <div class="stop-photo-overlay"></div>
+    <div class="stop-ghost-num">02</div>
+    <div class="stop-photo-tag">Stop 02 · The Atlantic City</div>
+  </div>
+  <div class="stop-body">
+    <h3>Lisbon, Portugal</h3>
+    <p class="tagline">Seven hills, a river that looks like an ocean, pastel tiles on every surface, and a melancholy so beautiful it has its own word: saudade.</p>
+    <p class="desc">Lisbon is the westernmost capital in continental Europe and has the feel of a city that reached the edge of the known world and simply stopped, unhurried, facing the Atlantic. The Alfama district — the old Moorish quarter, its streets too steep and narrow for cars — is the city's emotional heart, best explored without a map. Take tram 28 for the view, then abandon it and walk. The Jerónimos Monastery in Belém is the finest example of Manueline architecture on earth — a style born from the wealth of the Age of Discoveries, encrusted with ropes, armillary spheres, and exotic naturalistic detail. Eat a pastel de nata warm from the oven at Pastéis de Belém, open since 1837. Stay three days.</p>
+    <div class="fact-chips">
+      <span class="chip gold">Alfama: the original Moorish medina, 8th century</span>
+      <span class="chip">Jerónimos Monastery: UNESCO, built 1501</span>
+      <span class="chip">Pastel de nata: the recipe is a secret since 1837</span>
+      <span class="chip">Best months: Apr–Jun, Sep–Oct</span>
+      <span class="chip">Don't miss: Miradouro da Graça at sunset</span>
+    </div>
+  </div>
+</article>
+
+<!-- CONNECTOR 2→3 -->
+<div class="connector"><div class="connector-inner">
+  <div class="connector-drive">
+    <span class="drive-time">6 hr 30 min southeast</span>
+    <span class="drive-detail">390 mi · A-2 / E-1 south to Seville, then A-92 to Granada</span>
+  </div>
+  <div class="sq-label">Side Quests Along the Way</div>
+  <div class="sidequests">
+    <div class="sidequest"><span class="sq-icon">💃</span><div><div class="sq-name">Seville, Spain</div><div class="sq-note">The Alcázar palace, the Cathedral (the world's largest Gothic church), and a flamenco tablao after 10pm. Worth a night of its own between Lisbon and Granada.</div></div></div>
+    <div class="sidequest"><span class="sq-icon">🌿</span><div><div class="sq-name">Córdoba, Spain</div><div class="sq-note">The Mezquita — a hypostyle mosque of 856 columns with a Catholic cathedral built directly inside it — is one of the most extraordinary buildings in Europe. The Jewish quarter around it is intact and beautiful.</div></div></div>
+    <div class="sidequest"><span class="sq-icon">🏖️</span><div><div class="sq-name">Algarve Coast, Portugal</div><div class="sq-note">A detour south before crossing into Spain. The sea stacks and grottos around Lagos and Sagres are Portugal's most dramatic coastline.</div></div></div>
+  </div>
+</div></div>
+
+<!-- ══ STOP 3 ══ -->
+<article class="stop-card">
+  <div class="stop-photo">
+    <img src="https://images.unsplash.com/photo-1605654464243-3668a4c0de3d?q=80&w=1750&auto=format&fit=crop" alt="Alhambra, Granada, Spain" loading="lazy">
+    <div class="stop-photo-overlay"></div>
+    <div class="stop-ghost-num">03</div>
+    <div class="stop-photo-tag">Stop 03 · The Palace</div>
+  </div>
+  <div class="stop-body">
+    <h3>Alhambra, Granada, Spain</h3>
+    <p class="tagline">The last great Moorish palace in Europe, built on a red hill above a city the Nasrid sultans refused to leave — until, in 1492, they had no choice.</p>
+    <p class="desc">The Alhambra is the finest surviving example of Moorish palatial architecture in the world, and it demands more time than most visitors give it. The Nasrid Palaces — the ceremonial heart of the complex — are a sustained act of architectural genius: rooms of breathtaking geometric tilework giving way to carved stucco muqarnas ceilings, water channels running through marble courtyards, and the Court of the Lions with its famous fountain supported by twelve marble lions. The Generalife gardens above are what the sultans retreated to when the palace felt like work. Book timed-entry tickets weeks in advance; they sell out entirely in peak season and the evening sessions, lit differently, are worth seeking out.</p>
+    <div class="fact-chips">
+      <span class="chip gold">Built: 13th–14th century, Nasrid dynasty</span>
+      <span class="chip">UNESCO World Heritage since 1984</span>
+      <span class="chip">Timed entry: book weeks in advance</span>
+      <span class="chip">Evening sessions available: different light entirely</span>
+      <span class="chip">Don't miss: Mirador de San Nicolás view at dusk</span>
+    </div>
+  </div>
+</article>
+
+<!-- CONNECTOR 3→4 -->
+<div class="connector"><div class="connector-inner">
+  <div class="connector-journey">
+    <span class="journey-icon">🚢</span>
+    <div class="journey-main">
+      <div class="journey-time">Drive to Tarifa, ferry to Tangier</div>
+      <div class="journey-detail">2 hr drive south · then 35 min ferry crossing · Spain → Morocco</div>
+      <div class="journey-note">The Strait of Gibraltar crossing is one of the great short journeys — you watch Europe recede and Africa approach in less than an hour. Tarifa is the southernmost point of continental Europe; on a clear day you can see Morocco from the beach. The ferry to Tangier Med departs regularly. Have your passport ready; this is a real border crossing.</div>
+    </div>
+  </div>
+  <div class="sq-label">Side Quests Along the Way</div>
+  <div class="sidequests">
+    <div class="sidequest"><span class="sq-icon">🦅</span><div><div class="sq-name">Gibraltar</div><div class="sq-note">The British Overseas Territory at the tip of Spain, with Barbary macaques on the Rock, a cable car, and a surreal Anglo-Spanish cultural overlap that shouldn't work but does.</div></div></div>
+    <div class="sidequest"><span class="sq-icon">🌊</span><div><div class="sq-name">Tarifa, Spain</div><div class="sq-note">The windiest town in Europe and the kitesurfing capital of the continent. The old walled medina is quiet and the beach stretches for miles.</div></div></div>
+    <div class="sidequest"><span class="sq-icon">🏛️</span><div><div class="sq-name">Tangier, Morocco</div><div class="sq-note">The port city that has always been a threshold — between Europe and Africa, between languages, between centuries. The Kasbah Museum and the Medina are the right entry point to Morocco.</div></div></div>
+  </div>
+</div></div>
+
+<!-- ══ STOP 4 ══ -->
+<article class="stop-card">
+  <div class="stop-photo">
+    <img src="https://images.unsplash.com/photo-1583856073081-d75a4b9ce95b?q=80&w=1770&auto=format&fit=crop" alt="Marrakech, Morocco" loading="lazy">
+    <div class="stop-photo-overlay"></div>
+    <div class="stop-ghost-num">04</div>
+    <div class="stop-photo-tag">Stop 04 · The Red City</div>
+  </div>
+  <div class="stop-body">
+    <h3>Marrakech, Morocco</h3>
+    <p class="tagline">A city that assaults every sense simultaneously and makes you feel, somehow, that this is exactly right.</p>
+    <p class="desc">Marrakech is not subtle. The medina is a dense, labyrinthine world of souks, riads, mosques, and tanneries that operates at a pace and a volume entirely its own. The Djemaa el-Fna — the great central square — transforms from an afternoon market of orange juice stalls and fortune tellers into an evening theatre of food smoke, musicians, storytellers, and snake charmers. The Bahia Palace shows what Moroccan domestic architecture achieves at its most ambitious. The Saadian Tombs, sealed for centuries and only rediscovered in 1917. Stay in a riad in the medina: the contrast between the chaos outside and the cool, tiled interior courtyard is the essential Marrakech experience.</p>
+    <div class="fact-chips">
+      <span class="chip gold">Medina: UNESCO World Heritage since 1985</span>
+      <span class="chip">Djemaa el-Fna: UNESCO Intangible Heritage</span>
+      <span class="chip">Founded: 1070 by the Almoravid dynasty</span>
+      <span class="chip">Best months: Oct–Apr</span>
+      <span class="chip">Don't miss: Saadian Tombs, Bahia Palace</span>
+    </div>
+  </div>
+</article>
+
+<!-- CONNECTOR 4→5 -->
+<div class="connector"><div class="connector-inner">
+  <div class="connector-drive">
+    <span class="drive-time">3 hr north</span>
+    <span class="drive-detail">185 mi · A7 motorway to Fez</span>
+  </div>
+  <div class="sq-label">Side Quests Along the Way</div>
+  <div class="sidequests">
+    <div class="sidequest"><span class="sq-icon">🔵</span><div><div class="sq-name">Chefchaouen, Morocco</div><div class="sq-note">The blue city in the Rif Mountains — every wall, stair, and doorway painted in shades of indigo and cerulean. More beautiful and less crowded than Marrakech.</div></div></div>
+    <div class="sidequest"><span class="sq-icon">🌊</span><div><div class="sq-name">Essaouira, Morocco</div><div class="sq-note">A walled coastal medina on the Atlantic, battered by constant wind and consequently much cooler than Marrakech. Jimi Hendrix was briefly a regular. Good fresh fish.</div></div></div>
+    <div class="sidequest"><span class="sq-icon">🏔️</span><div><div class="sq-name">Atlas Mountains</div><div class="sq-note">The high Atlas between Marrakech and the desert. Toubkal, at 13,671 ft, is North Africa's highest peak. The Ourika Valley is an easier day-trip from Marrakech.</div></div></div>
+  </div>
+</div></div>
+
+<!-- ══ STOP 5 ══ -->
+<article class="stop-card">
+  <div class="stop-photo">
+    <img src="https://images.unsplash.com/photo-1609597876248-e5f7c84f0295?w=900&auto=format&fit=crop&q=60" alt="Fez, Morocco" loading="lazy">
+    <div class="stop-photo-overlay"></div>
+    <div class="stop-ghost-num">05</div>
+    <div class="stop-photo-tag">Stop 05 · The Medieval City</div>
+  </div>
+  <div class="stop-body">
+    <h3>Fez, Morocco</h3>
+    <p class="tagline">The world's largest car-free urban zone, where the medieval city is not a preserved relic but a living, working, tanning, dyeing, baking reality.</p>
+    <p class="desc">Fez el-Bali is the world's oldest continuously inhabited medieval city — a UNESCO-listed labyrinth of 9,000 streets and alleyways that has operated without fundamental change since the 9th century. The medina is genuinely disorienting: a maze where every turn reveals a craftsman at work, a medersa courtyard, or a mosque entrance you're not allowed to enter. The Chouara Tannery, seen from the leather shop terraces above, is one of Morocco's iconic images — round stone vats of dye in earthy reds, ochres, and blues, worked by hand as they have been for a thousand years. Hire a local guide; the medina requires one, and the best guides reveal layers the maps cannot show.</p>
+    <div class="fact-chips">
+      <span class="chip gold">Fez el-Bali: UNESCO, founded 789 AD</span>
+      <span class="chip">9,000 streets in the medina</span>
+      <span class="chip">University of al-Qarawiyyin: oldest in the world, 859 AD</span>
+      <span class="chip">Chouara Tannery: operating since 11th century</span>
+      <span class="chip">Guide strongly recommended</span>
+    </div>
+  </div>
+</article>
+
+<!-- CONNECTOR 5→6 -->
+<div class="connector"><div class="connector-inner">
+  <div class="connector-drive">
+    <span class="drive-time">7 hr southeast</span>
+    <span class="drive-detail">360 mi · N13 over the Middle Atlas to Merzouga · the most dramatic drive of the route</span>
+  </div>
+  <div class="sq-label">Side Quests Along the Way</div>
+  <div class="sidequests">
+    <div class="sidequest"><span class="sq-icon">🌹</span><div><div class="sq-name">Valley of Roses, Dadès</div><div class="sq-note">The Dadès and Draa valleys bloom with rose fields every May, harvested for the global perfume industry. The kasbahs along this stretch are extraordinary.</div></div></div>
+    <div class="sidequest"><span class="sq-icon">🎬</span><div><div class="sq-name">Ouarzazate, Morocco</div><div class="sq-note">The "Hollywood of Africa" — Lawrence of Arabia, Gladiator, and Game of Thrones all filmed here. The Atlas Corporation Studios are open for tours. The Aït Benhaddou ksar is UNESCO-listed.</div></div></div>
+    <div class="sidequest"><span class="sq-icon">🦎</span><div><div class="sq-name">Todra Gorge</div><div class="sq-note">A 300-metre-high slot canyon cut through rose-red limestone, narrow enough in places to touch both walls. Rock climbers come from Europe for the routes; hikers come for the light at noon.</div></div></div>
+  </div>
+</div></div>
+
+<!-- ══ STOP 6 ══ -->
+<article class="stop-card">
+  <div class="stop-photo">
+    <img src="https://images.unsplash.com/photo-1664346582394-1f38bdb31d02?q=80&w=1770&auto=format&fit=crop" alt="Erg Chebbi, Morocco" loading="lazy">
+    <div class="stop-photo-overlay"></div>
+    <div class="stop-ghost-num">06</div>
+    <div class="stop-photo-tag">Stop 06 · The Sahara</div>
+  </div>
+  <div class="stop-body">
+    <h3>Erg Chebbi, Morocco</h3>
+    <p class="tagline">The road ends at Merzouga and the dunes begin — some rising to 500 feet, shifting imperceptibly, the colour of a lit match at dusk.</p>
+    <p class="desc">Erg Chebbi is an isolated sea of Saharan sand dunes near the Algerian border, rising abruptly from the flat desert plains around Merzouga to heights of 500 feet. It is not the largest erg in the Sahara — that would be the Erg Chech in Algeria — but it is the most accessible from Morocco and among the most visually dramatic. The light here changes every hour. At midday the sand is almost white; by late afternoon it deepens through amber to a vivid orange-red that photographers chase from across the world. Take a camel trek into the dunes at sunset and spend the night in a desert camp — cold in winter, hot in summer, and worth it entirely. Wake before dawn. The silence before sunrise at the edge of the Sahara is the end point this whole route has been building toward.</p>
+    <div class="fact-chips">
+      <span class="chip gold">Dune height: up to 500 ft / 150 m</span>
+      <span class="chip">Base town: Merzouga, 35 km from Algerian border</span>
+      <span class="chip">Best season: Oct–Apr</span>
+      <span class="chip">Summer highs: 104°F / 40°C+</span>
+      <span class="chip">Don't miss: camel trek + overnight desert camp</span>
+    </div>
+  </div>
+</article>
+
+
+<!-- PRACTICALITIES -->
+<section class="practical">
+  <div class="practical-inner">
+    <h2>Before you go.</h2>
+    <div class="practical-grid">
+      <div class="pcard">
+        <div class="pcard-title">The Strait Crossing</div>
+        <p>The ferry from Tarifa to Tangier Med is the route's pivot point — short in distance, significant in shift. Most nationalities need only a valid passport for Morocco (no visa for stays under 90 days for EU, US, UK, and many others). Check your specific nationality. The crossing itself takes 35 minutes on a good day; the border formalities on both sides add time. Allow two hours total.</p>
+      </div>
+      <div class="pcard">
+        <div class="pcard-title">Driving in Morocco</div>
+        <p>The road from Fez to Merzouga is long and crosses the Middle Atlas and pre-Saharan plateau — dramatic, mostly two-lane, and entirely manageable in a standard car. A 4WD is not required unless you plan to leave the tarmac around the dunes. Driving in Marrakech and Fez medinas is essentially impossible; park outside and walk. GPS works but local knowledge is better in the souks.</p>
+      </div>
+      <div class="pcard">
+        <div class="pcard-title">Best Season</div>
+        <p>Spring (March–May) and autumn (September–November) are ideal for the whole route. Marrakech and Fez in July and August are genuinely punishing — 100°F+ is common. The Sahara in winter is cold at night (freezing at altitude) but crisp and clear by day, which is actually the best time to visit Erg Chebbi. Madrid and Lisbon are comfortable year-round.</p>
+      </div>
+      <div class="pcard">
+        <div class="pcard-title">Alhambra Tickets</div>
+        <p>Book the Alhambra the moment your dates are fixed — ideally six to eight weeks in advance for peak season. The Nasrid Palaces section has a strict timed entry and sells out completely. Evening tickets are slightly easier to obtain and give you the rooms in a different, dimmer light that some prefer. The website is the only reliable booking channel; third-party resellers charge significant premiums.</p>
+      </div>
+      <div class="pcard">
+        <div class="pcard-title">Money in Morocco</div>
+        <p>The Moroccan dirham cannot be exported, so exchange on arrival and use what you carry. Cash is king in the medinas, souks, and desert camps — cards are accepted in Marrakech and Fez hotels and some larger restaurants, but not reliably elsewhere. Bargaining is expected in the souks: the first price quoted is the opening position, not the destination. Remain cheerful throughout.</p>
+      </div>
+      <div class="pcard">
+        <div class="pcard-title">How Long You Really Need</div>
+        <p>Two weeks covers the route at a pace that leaves you wanting more time everywhere. Three weeks is comfortable. The Fez-to-Merzouga drive alone is a day you don't want to rush — the landscape through the Middle Atlas and the Todra Gorge area earns its own overnight stop. Build in a rest day in Marrakech; the medina is its own full-day activity every day you're there.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="footer-wm">Roamer</div>
+  <div class="footer-sub">Daily Route Guides</div>
+</footer>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+
+  const stops = [
+    { name: "Madrid, Spain",           lat: 40.416782,  lng: -3.703507  },
+    { name: "Lisbon, Portugal",        lat: 38.707751,  lng: -9.136592  },
+    { name: "Alhambra, Granada",       lat: 37.176055,  lng: -3.588110  },
+    { name: "Marrakech, Morocco",      lat: 31.625826,  lng: -7.989161  },
+    { name: "Fez, Morocco",            lat: 34.034653,  lng: -5.016193  },
+    { name: "Erg Chebbi, Morocco",     lat: 31.138236,  lng: -3.970775  },
+  ];
+
+  const map = L.map('overview-map', {
+    zoomControl: true,
+    scrollWheelZoom: false,
+    attributionControl: false,
+  });
+
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    maxZoom: 14
+  }).addTo(map);
+
+  const latlngs = stops.map(s => [s.lat, s.lng]);
+  const poly = L.polyline(latlngs, {
+    color: '#c9a85c', weight: 2, opacity: 0.7, dashArray: '6,6'
+  }).addTo(map);
+
+  const goldIcon = L.divIcon({
+    className: '',
+    html: `<div style="width:9px;height:9px;background:#c9a85c;border-radius:50%;border:2px solid rgba(245,237,224,.75);box-shadow:0 0 7px rgba(201,168,92,.5)"></div>`,
+    iconSize: [9,9], iconAnchor: [4.5,4.5]
+  });
+
+  stops.forEach((s, i) => {
+    L.marker([s.lat, s.lng], { icon: goldIcon }).addTo(map)
+     .bindTooltip(
+       `<span style="font-family:Jost,sans-serif;font-size:12px;color:#f5ede0;padding:4px 8px;display:block">${i+1}. ${s.name}</span>`,
+       { direction: 'right' }
+     );
+  });
+
+  map.fitBounds(poly.getBounds(), { padding: [28,28] });
+
+  const cards = document.querySelectorAll('.stop-card');
+  const io = new IntersectionObserver(entries => {
+    entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible'); });
+  }, { threshold: 0.08 });
+  cards.forEach(c => io.observe(c));
+});
+</script>
+</body>
+</html>

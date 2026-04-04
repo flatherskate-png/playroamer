@@ -1,0 +1,675 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Southwest Desert Loop — Roamer Route Guide</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300;1,400&family=Jost:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --cream: #fdf8f2;
+  --ink:   #1a1510;
+  --dusk:  #2a1f3d;
+  --ocean: #1a3a5c;
+  --fog:   #8fa8be;
+  --gold:  #c9a85c;
+  --rust:  #b85c3a;
+  --sage:  #7a9e87;
+}
+
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--cream);
+  color: var(--ink);
+  font-family: 'Jost', sans-serif;
+  font-weight: 300;
+  overflow-x: hidden;
+}
+
+/* ── HERO ── */
+.hero {
+  position: relative;
+  height: 100vh;
+  min-height: 600px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  overflow: hidden;
+}
+.hero-bg {
+  position: absolute; inset: 0;
+  background: url('https://images.unsplash.com/photo-1691929925627-8b6db69e2813?q=80&w=1740&auto=format&fit=crop') center 50% / cover no-repeat;
+  animation: slowZoom 20s ease-in-out infinite alternate;
+}
+@keyframes slowZoom {
+  from { transform: scale(1.0); }
+  to   { transform: scale(1.06); }
+}
+.hero-overlay {
+  position: absolute; inset: 0;
+  background: linear-gradient(to bottom,
+    rgba(26,21,16,0.02) 0%,
+    rgba(26,21,16,0.08) 45%,
+    rgba(26,21,16,0.78) 75%,
+    rgba(26,21,16,0.93) 100%);
+}
+.hero-content {
+  position: relative; z-index: 2;
+  padding: clamp(36px,5vw,72px) clamp(28px,6vw,80px);
+  max-width: 820px;
+}
+.route-badge {
+  display: inline-flex; align-items: center; gap: 10px;
+  font-size: 0.68rem; font-weight: 500;
+  letter-spacing: 0.2em; text-transform: uppercase;
+  color: var(--gold); margin-bottom: 18px;
+}
+.route-badge::before {
+  content: ''; display: block;
+  width: 22px; height: 1px; background: var(--gold);
+}
+.hero h1 {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: clamp(3.2rem, 8vw, 7rem);
+  font-weight: 300; line-height: 0.9;
+  color: var(--cream); letter-spacing: -0.01em;
+  margin-bottom: 28px;
+}
+.hero h1 em { font-style: italic; color: rgba(245,237,224,0.58); }
+.hero-meta { display: flex; gap: 32px; flex-wrap: wrap; }
+.hero-stat { display: flex; flex-direction: column; gap: 3px; }
+.hero-stat .num {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 1.85rem; font-weight: 300;
+  color: var(--cream); line-height: 1;
+}
+.hero-stat .lbl {
+  font-size: 0.65rem; font-weight: 500;
+  letter-spacing: 0.15em; text-transform: uppercase;
+  color: var(--fog);
+}
+.scroll-cue {
+  position: absolute; bottom: 32px; right: clamp(28px,6vw,80px);
+  z-index: 2; display: flex; flex-direction: column;
+  align-items: center; gap: 8px;
+  color: rgba(245,237,224,0.4); font-size: 0.62rem;
+  letter-spacing: 0.15em; text-transform: uppercase;
+  animation: fadeIn 2s 1.2s both;
+}
+.scroll-cue .drip {
+  width: 1px; height: 44px;
+  background: linear-gradient(to bottom, transparent, rgba(245,237,224,0.4));
+  animation: drip 2.4s 1.4s ease-in-out infinite;
+}
+@keyframes drip {
+  0%,100% { transform: scaleY(1); opacity: 0.4; }
+  55% { transform: scaleY(1.35); opacity: 0.9; }
+}
+@keyframes fadeIn { from { opacity:0; } to { opacity:1; } }
+
+/* ── INTRO ── */
+.intro {
+  max-width: 740px;
+  margin: 80px auto 0;
+  padding: 0 clamp(24px,5vw,60px);
+}
+.intro p {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: clamp(1.3rem, 2.6vw, 1.75rem);
+  font-weight: 300; line-height: 1.68;
+  color: var(--ocean);
+}
+.intro p strong { font-weight: 400; color: var(--rust); }
+
+/* ── OVERVIEW MAP ── */
+.map-section {
+  margin: 64px auto;
+  max-width: 980px;
+  padding: 0 clamp(24px,5vw,60px);
+}
+.eyebrow {
+  font-size: 0.66rem; font-weight: 500;
+  letter-spacing: 0.2em; text-transform: uppercase;
+  color: var(--fog); margin-bottom: 14px;
+  display: flex; align-items: center; gap: 12px;
+}
+.eyebrow::after {
+  content: ''; flex: 1; height: 1px;
+  background: linear-gradient(to right, rgba(143,168,190,0.35), transparent);
+}
+#overview-map {
+  width: 100%; height: 340px;
+  border-radius: 3px; overflow: hidden;
+  border: 1px solid rgba(42,31,61,0.09);
+}
+
+/* ── STOPS HEADING ── */
+.stops-heading {
+  max-width: 980px; margin: 0 auto 52px;
+  padding: 0 clamp(24px,5vw,60px);
+}
+.stops-heading h2 {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: clamp(2rem,4vw,2.9rem);
+  font-weight: 300; color: var(--dusk); line-height: 1.1;
+}
+
+/* ── STOP CARD ── */
+.stop-card {
+  max-width: 980px; margin: 0 auto;
+  padding: 0 clamp(24px,5vw,60px);
+  opacity: 0; transform: translateY(20px);
+  transition: opacity 0.65s ease, transform 0.65s ease;
+}
+.stop-card.visible { opacity: 1; transform: none; }
+
+.stop-photo {
+  position: relative;
+  width: 100%;
+  height: clamp(240px, 40vw, 460px);
+  overflow: hidden;
+  border-radius: 3px 3px 0 0;
+}
+.stop-photo img {
+  width: 100%; height: 100%;
+  object-fit: cover; display: block;
+  transition: transform 0.7s ease;
+}
+.stop-card:hover .stop-photo img { transform: scale(1.03); }
+.stop-photo-overlay {
+  position: absolute; inset: 0;
+  background: linear-gradient(to bottom,
+    rgba(26,21,16,0) 45%,
+    rgba(26,21,16,0.55) 100%);
+  pointer-events: none;
+}
+.stop-ghost-num {
+  position: absolute; top: 14px; right: 20px;
+  font-family: 'Cormorant Garamond', serif;
+  font-size: clamp(3.2rem,7vw,5.5rem);
+  font-weight: 300; color: rgba(245,237,224,0.5);
+  line-height: 1; pointer-events: none; z-index: 2;
+  letter-spacing: -0.02em;
+}
+.stop-photo-tag {
+  position: absolute; bottom: 16px; left: 20px;
+  font-size: 0.63rem; font-weight: 600;
+  letter-spacing: 0.2em; text-transform: uppercase;
+  color: var(--gold); z-index: 2;
+}
+.stop-body {
+  background: var(--dusk);
+  padding: clamp(26px,3.5vw,44px) clamp(22px,4vw,48px);
+  border-radius: 0 0 3px 3px;
+}
+.stop-body h3 {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: clamp(1.65rem,3.2vw,2.3rem);
+  font-weight: 300; color: var(--cream);
+  line-height: 1.12; margin-bottom: 12px;
+}
+.stop-body .tagline {
+  font-family: 'Cormorant Garamond', serif;
+  font-style: italic; font-size: 1.03rem;
+  color: rgba(245,237,224,0.48);
+  line-height: 1.55; margin-bottom: 16px;
+}
+.stop-body p.desc {
+  font-size: 0.87rem; line-height: 1.8;
+  color: rgba(245,237,224,0.68);
+  font-weight: 300; margin-bottom: 22px;
+  max-width: 72ch;
+}
+.fact-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip {
+  font-size: 0.69rem; font-weight: 400;
+  letter-spacing: 0.05em; color: var(--fog);
+  border: 1px solid rgba(143,168,190,0.22);
+  padding: 5px 12px; border-radius: 100px;
+  background: rgba(143,168,190,0.05);
+}
+.chip.gold {
+  color: var(--gold);
+  border-color: rgba(201,168,92,0.28);
+  background: rgba(201,168,92,0.06);
+}
+
+/* ── CONNECTOR ── */
+.connector {
+  max-width: 980px; margin: 0 auto;
+  padding: 0 clamp(24px,5vw,60px);
+}
+.connector-inner {
+  border-left: 1px solid rgba(201,168,92,0.28);
+  margin-left: 10px;
+  padding: 30px 0 30px 32px;
+  position: relative;
+}
+.connector-inner::before {
+  content: '';
+  position: absolute; top: 30px; left: -5px;
+  width: 9px; height: 9px; border-radius: 50%;
+  background: var(--gold);
+  box-shadow: 0 0 8px rgba(201,168,92,0.4);
+}
+.connector-inner::after {
+  content: '';
+  position: absolute; bottom: 30px; left: -5px;
+  width: 9px; height: 9px; border-radius: 50%;
+  background: rgba(201,168,92,0.3);
+  border: 1px solid var(--gold);
+}
+.connector-drive {
+  display: flex; align-items: baseline; gap: 10px;
+  margin-bottom: 20px;
+}
+.drive-time {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 1.3rem; font-weight: 300;
+  color: var(--dusk); line-height: 1;
+}
+.drive-detail { font-size: 0.71rem; color: var(--fog); letter-spacing: 0.06em; }
+.sq-label {
+  font-size: 0.62rem; font-weight: 600;
+  letter-spacing: 0.2em; text-transform: uppercase;
+  color: var(--rust); margin-bottom: 12px;
+}
+.sidequests { display: flex; flex-wrap: wrap; gap: 10px; }
+.sidequest {
+  display: flex; align-items: flex-start; gap: 10px;
+  background: #f5ede8;
+  border: 1px solid rgba(184,92,58,0.13);
+  border-radius: 3px;
+  padding: 10px 14px;
+  width: clamp(200px, 28%, 260px);
+}
+.sq-icon { font-size: 1rem; line-height: 1; margin-top: 1px; flex-shrink: 0; }
+.sq-name { font-size: 0.79rem; font-weight: 500; color: var(--ink); line-height: 1.25; margin-bottom: 3px; }
+.sq-note { font-size: 0.69rem; color: #7a5a4a; font-weight: 300; line-height: 1.45; }
+
+/* ── PRACTICALITIES ── */
+.practical {
+  background: var(--dusk);
+  padding: 72px clamp(24px,6vw,80px);
+  margin-top: 72px;
+}
+.practical-inner { max-width: 980px; margin: 0 auto; }
+.practical h2 {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: clamp(2rem,4vw,2.8rem);
+  font-weight: 300; color: var(--cream);
+  margin-bottom: 48px; line-height: 1.1;
+}
+.practical-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px,1fr));
+  gap: 32px;
+}
+.pcard { border-left: 1px solid rgba(201,168,92,0.3); padding-left: 20px; }
+.pcard-title {
+  font-size: 0.67rem; font-weight: 600;
+  letter-spacing: 0.18em; text-transform: uppercase;
+  color: var(--gold); margin-bottom: 10px;
+}
+.pcard p { font-size: 0.86rem; line-height: 1.75; color: rgba(245,237,224,0.62); font-weight: 300; }
+
+/* ── FOOTER ── */
+footer { background: var(--ink); padding: 36px; text-align: center; }
+.footer-wm {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 1.35rem; font-weight: 300;
+  color: rgba(245,237,224,0.3); letter-spacing: 0.1em; margin-bottom: 6px;
+}
+.footer-sub { font-size: 0.65rem; letter-spacing: 0.14em; text-transform: uppercase; color: rgba(245,237,224,0.15); }
+
+/* ── LEAFLET ── */
+.leaflet-tooltip {
+  background: #2a1f3d !important;
+  border: 1px solid rgba(201,168,92,0.3) !important;
+  box-shadow: none !important;
+  border-radius: 2px !important;
+  padding: 0 !important;
+}
+.leaflet-tooltip::before { display: none !important; }
+
+@media (max-width: 560px) {
+  .sidequest { width: 100%; }
+  .hero-meta { gap: 20px; }
+}
+</style>
+</head>
+<body>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-bg"></div>
+  <div class="hero-overlay"></div>
+  <div class="hero-content">
+    <div class="route-badge">Roamer Route Guide</div>
+    <h1>Southwest<br><em>Desert</em><br>Loop</h1>
+    <div class="hero-meta">
+      <div class="hero-stat"><span class="num">900</span><span class="lbl">Miles of Red Rock</span></div>
+      <div class="hero-stat"><span class="num">6</span><span class="lbl">Iconic Stops</span></div>
+      <div class="hero-stat"><span class="num">10–14</span><span class="lbl">Days Recommended</span></div>
+      <div class="hero-stat"><span class="num">3</span><span class="lbl">States</span></div>
+    </div>
+  </div>
+  <div class="scroll-cue"><div class="drip"></div>Scroll</div>
+</section>
+
+<!-- INTRO -->
+<section class="intro">
+  <p>The American Southwest is geology made spectacular — <strong>900 miles of sandstone arches, canyon walls, and mesa silhouettes</strong> that turn a deep, implausible red at dusk. Start in the neon excess of Las Vegas. End at the edge of the largest canyon on earth. Everything in between earns its place.</p>
+</section>
+
+<!-- MAP -->
+<section class="map-section">
+  <div class="eyebrow">The Route</div>
+  <div id="overview-map"></div>
+</section>
+
+<!-- STOPS HEADING -->
+<div class="stops-heading">
+  <h2>Six stops.<br>One long loop through the red rock.</h2>
+</div>
+
+
+<!-- ══ STOP 1 ══ -->
+<article class="stop-card">
+  <div class="stop-photo">
+    <img src="https://images.unsplash.com/photo-1583207884889-d79abf0d0aa3?q=80&w=1768&auto=format&fit=crop" alt="Las Vegas, Nevada" loading="lazy">
+    <div class="stop-photo-overlay"></div>
+    <div class="stop-ghost-num">01</div>
+    <div class="stop-photo-tag">Stop 01 · The Launchpad</div>
+  </div>
+  <div class="stop-body">
+    <h3>Las Vegas, Nevada</h3>
+    <p class="tagline">Built in a desert to prove that a desert is no obstacle to human ambition, excess, or air conditioning.</p>
+    <p class="desc">Las Vegas exists as pure spectacle — a city designed entirely around the premise that you should not sleep, not stop, not look away. As a starting point for a desert road trip it is, perversely, perfect: it has every car rental company on earth, direct flights from everywhere, and a Strip walk at midnight that calibrates your sense of scale before you encounter the real thing. Spend one night, two maximum. Walk the Strip once. Eat well — Las Vegas has somehow become a serious food city. Then leave early while the desert is still cool and the road is still empty.</p>
+    <div class="fact-chips">
+      <span class="chip gold">Elevation: 2,001 ft / 610 m</span>
+      <span class="chip">40+ million visitors per year</span>
+      <span class="chip">Average July high: 104°F / 40°C</span>
+      <span class="chip">Best months: Mar–May, Sep–Nov</span>
+      <span class="chip">Don't miss: Red Rock Canyon, 30 min west</span>
+    </div>
+  </div>
+</article>
+
+<!-- CONNECTOR 1→2 -->
+<div class="connector"><div class="connector-inner">
+  <div class="connector-drive">
+    <span class="drive-time">2 hr 30 min northeast</span>
+    <span class="drive-detail">158 mi · I-15 N to UT-9</span>
+  </div>
+  <div class="sq-label">Side Quests Along the Way</div>
+  <div class="sidequests">
+    <div class="sidequest"><span class="sq-icon">🎰</span><div><div class="sq-name">Valley of Fire State Park</div><div class="sq-note">Nevada's oldest state park, 50 miles northeast of Vegas. Blazing red Aztec sandstone formations and ancient petroglyphs. A preview of what's coming.</div></div></div>
+    <div class="sidequest"><span class="sq-icon">💧</span><div><div class="sq-name">Hoover Dam</div><div class="sq-note">The 726-ft concrete arch-gravity dam that tamed the Colorado River in 1935. The bypass bridge gives the best view. An hour from Vegas.</div></div></div>
+    <div class="sidequest"><span class="sq-icon">🏔️</span><div><div class="sq-name">St. George, Utah</div><div class="sq-note">The gateway town to Zion, with red cliffs rising right from the edge of the suburbs. Good coffee and a calmer pace before the park.</div></div></div>
+  </div>
+</div></div>
+
+<!-- ══ STOP 2 ══ -->
+<article class="stop-card">
+  <div class="stop-photo">
+    <img src="https://images.unsplash.com/photo-1559247364-f01cef0dea83?q=80&w=1740&auto=format&fit=crop" alt="Zion National Park" loading="lazy">
+    <div class="stop-photo-overlay"></div>
+    <div class="stop-ghost-num">02</div>
+    <div class="stop-photo-tag">Stop 02 · The Narrows</div>
+  </div>
+  <div class="stop-body">
+    <h3>Zion National Park</h3>
+    <p class="tagline">A canyon so narrow in places that you wade through the Virgin River between walls that block out the sky entirely.</p>
+    <p class="desc">Zion is the most visited national park in the US for good reason: it is extraordinarily beautiful and surprisingly accessible. The main canyon is navigated by shuttle bus — private cars aren't permitted in peak season — which keeps the crowds manageable on the road even when the trails are busy. Angels Landing is the famous hike: a chain-assisted scramble to a narrow summit ridge with 1,488-foot drop-offs on both sides. It now requires a permit lottery, which is worth entering. The Narrows is the other essential — a slot canyon hike through the Virgin River, knee-to-waist-deep in cold water, between walls 20 feet wide and 1,000 feet tall. Rent the waterproof gear in Springdale.</p>
+    <div class="fact-chips">
+      <span class="chip gold">Canyon depth: up to 2,640 ft</span>
+      <span class="chip">Angels Landing: permit required</span>
+      <span class="chip">The Narrows: best May–Jun, Sep–Oct</span>
+      <span class="chip">Avoid: July–Aug (flash flood season)</span>
+      <span class="chip">Stay in Springdale just outside the gate</span>
+    </div>
+  </div>
+</article>
+
+<!-- CONNECTOR 2→3 -->
+<div class="connector"><div class="connector-inner">
+  <div class="connector-drive">
+    <span class="drive-time">4 hr 15 min northeast</span>
+    <span class="drive-detail">230 mi · UT-9, US-89 N, US-191 N</span>
+  </div>
+  <div class="sq-label">Side Quests Along the Way</div>
+  <div class="sidequests">
+    <div class="sidequest"><span class="sq-icon">🌅</span><div><div class="sq-name">Bryce Canyon National Park</div><div class="sq-note">A short detour north of UT-89. Thousands of orange hoodoo spires rising from a pink limestone amphitheatre. Sunrise from Bryce Point is one of the Southwest's best views.</div></div></div>
+    <div class="sidequest"><span class="sq-icon">🌊</span><div><div class="sq-name">Lake Powell & Glen Canyon</div><div class="sq-note">A vast reservoir with a fractured red-rock shoreline. Houseboat rentals, kayaking, and the flooded remains of Glen Canyon beneath the water.</div></div></div>
+    <div class="sidequest"><span class="sq-icon">🏜️</span><div><div class="sq-name">Canyonlands National Park</div><div class="sq-note">Adjacent to Arches and the wilder, emptier sibling. Island in the Sky district gives you a 1,000-ft mesa-top perspective over the Colorado and Green Rivers.</div></div></div>
+  </div>
+</div></div>
+
+<!-- ══ STOP 3 ══ -->
+<article class="stop-card">
+  <div class="stop-photo">
+    <img src="https://images.unsplash.com/photo-1614484564972-e37b65b5a573?w=900&auto=format&fit=crop&q=60" alt="Arches National Park" loading="lazy">
+    <div class="stop-photo-overlay"></div>
+    <div class="stop-ghost-num">03</div>
+    <div class="stop-photo-tag">Stop 03 · The Arches</div>
+  </div>
+  <div class="stop-body">
+    <h3>Arches National Park</h3>
+    <p class="tagline">Over 2,000 natural sandstone arches in a single park. The geology here is showing off and it knows it.</p>
+    <p class="desc">Arches contains the highest density of natural stone arches on earth — 2,000-plus documented formations in 76,679 acres of Utah high desert. Delicate Arch, the one on the Utah license plate, is a 65-foot freestanding span perched at the edge of a slickrock bowl with the La Sal Mountains behind it: a 3-mile round-trip hike that earns its reputation entirely. The Windows section is more accessible and nearly as dramatic. Go in the morning before the heat builds or at sunset when the sandstone goes from orange to blood red to almost purple in the space of 20 minutes. Bring more water than you think you need; every sign in the park says this and every sign is correct.</p>
+    <div class="fact-chips">
+      <span class="chip gold">2,000+ documented arches</span>
+      <span class="chip">Delicate Arch: 65 ft tall</span>
+      <span class="chip">Timed entry required: Apr–Oct</span>
+      <span class="chip">Elevation: 4,085–5,653 ft</span>
+      <span class="chip">Base in Moab, 5 mi south</span>
+    </div>
+  </div>
+</article>
+
+<!-- CONNECTOR 3→4 -->
+<div class="connector"><div class="connector-inner">
+  <div class="connector-drive">
+    <span class="drive-time">2 hr south</span>
+    <span class="drive-detail">110 mi · US-191 S to US-163 S</span>
+  </div>
+  <div class="sq-label">Side Quests Along the Way</div>
+  <div class="sidequests">
+    <div class="sidequest"><span class="sq-icon">🏛️</span><div><div class="sq-name">Mesa Verde National Park</div><div class="sq-note">The ancestral Puebloan cliff dwellings built into the canyon walls around 600 AD. A detour southwest, but the Cliff Palace tour is genuinely haunting.</div></div></div>
+    <div class="sidequest"><span class="sq-icon">🌵</span><div><div class="sq-name">Needles District, Canyonlands</div><div class="sq-note">The less-visited southern section of Canyonlands with red-and-white striped spires and backcountry hiking that gets very empty very fast.</div></div></div>
+    <div class="sidequest"><span class="sq-icon">🚣</span><div><div class="sq-name">Colorado River Rafting, Moab</div><div class="sq-note">Half-day and full-day floats through Canyon Lands scenery. Calm sections for beginners, Class III–IV rapids for those who want them.</div></div></div>
+  </div>
+</div></div>
+
+<!-- ══ STOP 4 ══ -->
+<article class="stop-card">
+  <div class="stop-photo">
+    <img src="https://images.unsplash.com/photo-1480004902249-cdb28d6a01a4?q=80&w=2211&auto=format&fit=crop" alt="Monument Valley" loading="lazy">
+    <div class="stop-photo-overlay"></div>
+    <div class="stop-ghost-num">04</div>
+    <div class="stop-photo-tag">Stop 04 · The Monuments</div>
+  </div>
+  <div class="stop-body">
+    <h3>Monument Valley</h3>
+    <p class="tagline">The backdrop to a hundred westerns, a thousand road trip photographs, and one very long stretch of US-163 that you will drive slower than the speed limit allows.</p>
+    <p class="desc">Monument Valley Navajo Tribal Park straddles the Utah–Arizona border and contains the most recognizable landscape in America — the three sandstone mittens rising 1,000 feet from the valley floor, formed over 50 million years of erosion and now sitting on Navajo Nation land managed by the tribe. The 17-mile Valley Drive is a self-guided dirt road loop past the major formations; it's accessible in a standard vehicle but earns a high-clearance 4WD in wet weather. A Navajo-guided tour gets you further in and provides the context the scenery deserves. Stay at The View Hotel if you can — sunrise over the mittens from the terrace is exactly what it sounds like.</p>
+    <div class="fact-chips">
+      <span class="chip gold">Mittens height: ~1,000 ft above valley</span>
+      <span class="chip">Navajo Nation Tribal Park</span>
+      <span class="chip">Valley Drive: 17 mi dirt road loop</span>
+      <span class="chip">Guided tours: required for backcountry</span>
+      <span class="chip">Don't miss: sunrise from The View Hotel</span>
+    </div>
+  </div>
+</article>
+
+<!-- CONNECTOR 4→5 -->
+<div class="connector"><div class="connector-inner">
+  <div class="connector-drive">
+    <span class="drive-time">1 hr southwest</span>
+    <span class="drive-detail">60 mi · US-163 S to US-89 S · Page, AZ</span>
+  </div>
+  <div class="sq-label">Side Quests Along the Way</div>
+  <div class="sidequests">
+    <div class="sidequest"><span class="sq-icon">💎</span><div><div class="sq-name">Antelope Canyon</div><div class="sq-note">The slot canyon just outside Page with light beams streaming through wave-sculpted sandstone. Upper Canyon is the iconic shot; Lower Canyon is less crowded. Navajo-guided tours only.</div></div></div>
+    <div class="sidequest"><span class="sq-icon">🌉</span><div><div class="sq-name">Natural Bridges National Monument</div><div class="sq-note">Three of the world's largest natural bridges in a remote canyon setting. Far less visited than Arches — you may have the trails to yourself.</div></div></div>
+    <div class="sidequest"><span class="sq-icon">🌊</span><div><div class="sq-name">Lake Powell Overlook</div><div class="sq-note">Pull off at Wahweap Overlook just north of Page for a sweeping view of the reservoir and the Glen Canyon Dam. Free, five minutes off the highway.</div></div></div>
+  </div>
+</div></div>
+
+<!-- ══ STOP 5 ══ -->
+<article class="stop-card">
+  <div class="stop-photo">
+    <img src="https://images.unsplash.com/photo-1629997047282-41f678126175?q=80&w=1740&auto=format&fit=crop" alt="Horseshoe Bend, Arizona" loading="lazy">
+    <div class="stop-photo-overlay"></div>
+    <div class="stop-ghost-num">05</div>
+    <div class="stop-photo-tag">Stop 05 · The Bend</div>
+  </div>
+  <div class="stop-body">
+    <h3>Horseshoe Bend, Arizona</h3>
+    <p class="tagline">The Colorado River wraps 270 degrees around a sandstone butte, 1,000 feet below the rim. The photograph does not prepare you for the vertigo.</p>
+    <p class="desc">Horseshoe Bend is technically a 1.5-mile round-trip walk from a parking lot — a flat, easy stroll across sandy desert that ends at an unguarded sandstone edge with a sheer thousand-foot drop to the river below. It is one of the most-photographed spots in the American Southwest and manages, despite this, to remain genuinely staggering in person. Go at sunrise or in the hour before sunset; midday turns the canyon into a furnace and washes out the red in the stone. The railing exists now — they added it after a series of accidents — but plenty of the rim is still open edge. Stay back from it.</p>
+    <div class="fact-chips">
+      <span class="chip gold">Drop to river: ~1,000 ft / 305 m</span>
+      <span class="chip">River bend: 270-degree meander</span>
+      <span class="chip">Walk from parking: 1.5 mi round trip</span>
+      <span class="chip">Entry fee: $10 per vehicle</span>
+      <span class="chip">Best light: sunrise or late afternoon</span>
+    </div>
+  </div>
+</article>
+
+<!-- CONNECTOR 5→6 -->
+<div class="connector"><div class="connector-inner">
+  <div class="connector-drive">
+    <span class="drive-time">2 hr 30 min west</span>
+    <span class="drive-detail">130 mi · US-89 S to AZ-64 W</span>
+  </div>
+  <div class="sq-label">Side Quests Along the Way</div>
+  <div class="sidequests">
+    <div class="sidequest"><span class="sq-icon">🌋</span><div><div class="sq-name">Vermilion Cliffs National Monument</div><div class="sq-note">A 3,000-ft escarpment of banded red-and-white sandstone running 30 miles along US-89A. The Wave, inside it, requires a permit lottery that most people lose several times before winning.</div></div></div>
+    <div class="sidequest"><span class="sq-icon">🦅</span><div><div class="sq-name">Cameron Trading Post</div><div class="sq-note">A 1916 trading post on Navajo Nation land, still operating. Navajo rugs, silver jewelry, and fry bread. A good, unhurried stop before the canyon.</div></div></div>
+    <div class="sidequest"><span class="sq-icon">🌵</span><div><div class="sq-name">Desert View Watchtower</div><div class="sq-note">The first Grand Canyon overlook you hit coming from the east — a 1932 stone tower with canyon views and Hopi murals inside. Often less crowded than the South Rim Village.</div></div></div>
+  </div>
+</div></div>
+
+<!-- ══ STOP 6 ══ -->
+<article class="stop-card">
+  <div class="stop-photo">
+    <img src="https://images.unsplash.com/photo-1691929925627-8b6db69e2813?q=80&w=1740&auto=format&fit=crop" alt="Grand Canyon South Rim, AZ" loading="lazy">
+    <div class="stop-photo-overlay"></div>
+    <div class="stop-ghost-num">06</div>
+    <div class="stop-photo-tag">Stop 06 · The Canyon</div>
+  </div>
+  <div class="stop-body">
+    <h3>Grand Canyon South Rim, Arizona</h3>
+    <p class="tagline">The most described landscape in America and somehow, still, the one that makes people go quiet when they reach the edge for the first time.</p>
+    <p class="desc">The Grand Canyon is 277 miles long, up to 18 miles wide, and a mile deep — carved by the Colorado River over five to six million years through rock layers that record two billion years of Earth's history. The South Rim is the accessible side: paved viewpoints, ranger programs, shuttle buses, and a village with lodges and restaurants. Walk the Rim Trail for free views in both directions. If you want to hike down, the Bright Angel Trail descends 9.5 miles to the Colorado — go early, carry a litre of water per hour, and remember that down is optional but up is mandatory. Stay for sunset. The light on the canyon walls shifts through amber, rose, and violet in the space of twenty minutes, and everyone watching it goes quiet at the same moment.</p>
+    <div class="fact-chips">
+      <span class="chip gold">Depth: 1 mile / 1.6 km</span>
+      <span class="chip">Length: 277 miles of river</span>
+      <span class="chip">Rock age: up to 1.8 billion years</span>
+      <span class="chip">Bright Angel Trail: 9.5 mi to river</span>
+      <span class="chip">South Rim open year-round</span>
+    </div>
+  </div>
+</article>
+
+
+<!-- PRACTICALITIES -->
+<section class="practical">
+  <div class="practical-inner">
+    <h2>Before you go.</h2>
+    <div class="practical-grid">
+      <div class="pcard">
+        <div class="pcard-title">The Heat Question</div>
+        <p>Summer in the Southwest is brutal. July and August see temperatures above 100°F at lower elevations; the Grand Canyon inner gorge regularly hits 110°F. The parks are manageable — Zion and Arches sit higher and cooler — but midday hikes in summer are genuinely dangerous. The sweet spots are March–May and September–October. If you must go in summer, hike before 8am and after 5pm.</p>
+      </div>
+      <div class="pcard">
+        <div class="pcard-title">America the Beautiful Pass</div>
+        <p>The $80 annual interagency pass covers entrance to all national parks and federal lands. This route visits Zion, Arches, and the Grand Canyon — three paid parks. The pass pays for itself immediately and covers Bryce, Canyonlands, and Mesa Verde if you detour. Buy it at the first park entrance or online before you leave.</p>
+      </div>
+      <div class="pcard">
+        <div class="pcard-title">Permits and Timed Entry</div>
+        <p>Zion's Angels Landing requires a permit lottery. Arches requires timed entry reservations April through October. Antelope Canyon is Navajo-guided tours only — book weeks in advance for peak season. The Wave at Vermilion Cliffs is a lottery with very long odds. Plan for these early; they will shape your schedule.</p>
+      </div>
+      <div class="pcard">
+        <div class="pcard-title">The Car</div>
+        <p>A standard rental handles the entire route. Monument Valley's Valley Drive is the one stretch that benefits from high clearance in wet conditions, but most rental SUVs manage it fine in dry weather. Don't bring anything you can't lock in the trunk — bear boxes are common in the parks but car break-ins are not unknown. Keep your gear out of sight.</p>
+      </div>
+      <div class="pcard">
+        <div class="pcard-title">Where to Sleep</div>
+        <p>Springdale for Zion, Moab for Arches and Canyonlands, and Grand Canyon Village or Tusayan for the South Rim. Book everything months in advance for peak season — Moab in particular fills up fast. Camping inside the parks is magical and requires reservations through Recreation.gov. The Navajo Nation lodges at Monument Valley are limited; The View Hotel books out early.</p>
+      </div>
+      <div class="pcard">
+        <div class="pcard-title">Water and Gas</div>
+        <p>Carry more water than you think you need — every sign in every park says this because people keep ignoring it and rangers keep rescuing them. A reusable 2-litre bottle minimum per person per day of hiking. Gas stations are sparse between parks; fill up whenever you're above half a tank. There is no gas inside Arches or Zion.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="footer-wm">Roamer</div>
+  <div class="footer-sub">Daily Route Guides</div>
+</footer>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+
+  const stops = [
+    { name: "Las Vegas, Nevada",              lat: 36.167426,  lng: -115.148413 },
+    { name: "Zion National Park",             lat: 37.322167,  lng: -113.004793 },
+    { name: "Arches National Park",           lat: 38.726525,  lng: -109.563046 },
+    { name: "Monument Valley",                lat: 36.982388,  lng: -110.111112 },
+    { name: "Horseshoe Bend, Arizona",        lat: 36.880453,  lng: -111.516133 },
+    { name: "Grand Canyon South Rim, AZ",     lat: 36.025454,  lng: -113.832114 },
+  ];
+
+  const map = L.map('overview-map', {
+    zoomControl: true,
+    scrollWheelZoom: false,
+    attributionControl: false,
+  });
+
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    maxZoom: 14
+  }).addTo(map);
+
+  const latlngs = stops.map(s => [s.lat, s.lng]);
+  const poly = L.polyline(latlngs, {
+    color: '#c9a85c', weight: 2, opacity: 0.7, dashArray: '6,6'
+  }).addTo(map);
+
+  const goldIcon = L.divIcon({
+    className: '',
+    html: `<div style="width:9px;height:9px;background:#c9a85c;border-radius:50%;border:2px solid rgba(245,237,224,.75);box-shadow:0 0 7px rgba(201,168,92,.5)"></div>`,
+    iconSize: [9,9], iconAnchor: [4.5,4.5]
+  });
+
+  stops.forEach((s, i) => {
+    L.marker([s.lat, s.lng], { icon: goldIcon }).addTo(map)
+     .bindTooltip(
+       `<span style="font-family:Jost,sans-serif;font-size:12px;color:#f5ede0;padding:4px 8px;display:block">${i+1}. ${s.name}</span>`,
+       { direction: 'right' }
+     );
+  });
+
+  map.fitBounds(poly.getBounds(), { padding: [28,28] });
+
+  const cards = document.querySelectorAll('.stop-card');
+  const io = new IntersectionObserver(entries => {
+    entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible'); });
+  }, { threshold: 0.08 });
+  cards.forEach(c => io.observe(c));
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,744 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Seven Wonders of the World — Roamer Route Guide</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300;1,400&family=Jost:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --cream: #fdf8f2;
+  --ink:   #1a1510;
+  --dusk:  #2a1f3d;
+  --ocean: #1a3a5c;
+  --fog:   #8fa8be;
+  --gold:  #c9a85c;
+  --rust:  #b85c3a;
+  --sage:  #7a9e87;
+}
+
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--cream);
+  color: var(--ink);
+  font-family: 'Jost', sans-serif;
+  font-weight: 300;
+  overflow-x: hidden;
+}
+
+/* ── HERO ── */
+.hero {
+  position: relative;
+  height: 100vh;
+  min-height: 600px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  overflow: hidden;
+}
+.hero-bg {
+  position: absolute; inset: 0;
+  background: url('https://images.unsplash.com/photo-1548013146-72479768bada?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w4ODQ4OTB8MHwxfHNlYXJjaHwyfHxBZ3JhfGVufDF8MHx8fDE3NzIzMzU3ODF8MA&ixlib=rb-4.1.0&q=80&w=1080') center 40% / cover no-repeat;
+  animation: slowZoom 20s ease-in-out infinite alternate;
+}
+@keyframes slowZoom {
+  from { transform: scale(1.0); }
+  to   { transform: scale(1.06); }
+}
+.hero-overlay {
+  position: absolute; inset: 0;
+  background: linear-gradient(to bottom,
+    rgba(26,21,16,0.02) 0%,
+    rgba(26,21,16,0.08) 45%,
+    rgba(26,21,16,0.78) 75%,
+    rgba(26,21,16,0.93) 100%);
+}
+.hero-content {
+  position: relative; z-index: 2;
+  padding: clamp(36px,5vw,72px) clamp(28px,6vw,80px);
+  max-width: 820px;
+}
+.route-badge {
+  display: inline-flex; align-items: center; gap: 10px;
+  font-size: 0.68rem; font-weight: 500;
+  letter-spacing: 0.2em; text-transform: uppercase;
+  color: var(--gold); margin-bottom: 18px;
+}
+.route-badge::before {
+  content: ''; display: block;
+  width: 22px; height: 1px; background: var(--gold);
+}
+.hero h1 {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: clamp(3.2rem, 8vw, 7rem);
+  font-weight: 300; line-height: 0.9;
+  color: var(--cream); letter-spacing: -0.01em;
+  margin-bottom: 28px;
+}
+.hero h1 em { font-style: italic; color: rgba(245,237,224,0.58); }
+.hero-meta { display: flex; gap: 32px; flex-wrap: wrap; }
+.hero-stat { display: flex; flex-direction: column; gap: 3px; }
+.hero-stat .num {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 1.85rem; font-weight: 300;
+  color: var(--cream); line-height: 1;
+}
+.hero-stat .lbl {
+  font-size: 0.65rem; font-weight: 500;
+  letter-spacing: 0.15em; text-transform: uppercase;
+  color: var(--fog);
+}
+.scroll-cue {
+  position: absolute; bottom: 32px; right: clamp(28px,6vw,80px);
+  z-index: 2; display: flex; flex-direction: column;
+  align-items: center; gap: 8px;
+  color: rgba(245,237,224,0.4); font-size: 0.62rem;
+  letter-spacing: 0.15em; text-transform: uppercase;
+  animation: fadeIn 2s 1.2s both;
+}
+.scroll-cue .drip {
+  width: 1px; height: 44px;
+  background: linear-gradient(to bottom, transparent, rgba(245,237,224,0.4));
+  animation: drip 2.4s 1.4s ease-in-out infinite;
+}
+@keyframes drip {
+  0%,100% { transform: scaleY(1); opacity: 0.4; }
+  55% { transform: scaleY(1.35); opacity: 0.9; }
+}
+@keyframes fadeIn { from { opacity:0; } to { opacity:1; } }
+
+/* ── INTRO ── */
+.intro {
+  max-width: 740px;
+  margin: 80px auto 0;
+  padding: 0 clamp(24px,5vw,60px);
+}
+.intro p {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: clamp(1.3rem, 2.6vw, 1.75rem);
+  font-weight: 300; line-height: 1.68;
+  color: var(--ocean);
+}
+.intro p strong { font-weight: 400; color: var(--rust); }
+
+/* ── OVERVIEW MAP ── */
+.map-section {
+  margin: 64px auto;
+  max-width: 980px;
+  padding: 0 clamp(24px,5vw,60px);
+}
+.eyebrow {
+  font-size: 0.66rem; font-weight: 500;
+  letter-spacing: 0.2em; text-transform: uppercase;
+  color: var(--fog); margin-bottom: 14px;
+  display: flex; align-items: center; gap: 12px;
+}
+.eyebrow::after {
+  content: ''; flex: 1; height: 1px;
+  background: linear-gradient(to right, rgba(143,168,190,0.35), transparent);
+}
+#overview-map {
+  width: 100%; height: 340px;
+  border-radius: 3px; overflow: hidden;
+  border: 1px solid rgba(42,31,61,0.09);
+}
+
+/* ── STOPS HEADING ── */
+.stops-heading {
+  max-width: 980px; margin: 0 auto 52px;
+  padding: 0 clamp(24px,5vw,60px);
+}
+.stops-heading h2 {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: clamp(2rem,4vw,2.9rem);
+  font-weight: 300; color: var(--dusk); line-height: 1.1;
+}
+
+/* ── STOP CARD ── */
+.stop-card {
+  max-width: 980px; margin: 0 auto;
+  padding: 0 clamp(24px,5vw,60px);
+  opacity: 0; transform: translateY(20px);
+  transition: opacity 0.65s ease, transform 0.65s ease;
+}
+.stop-card.visible { opacity: 1; transform: none; }
+
+.stop-photo {
+  position: relative;
+  width: 100%;
+  height: clamp(240px, 40vw, 460px);
+  overflow: hidden;
+  border-radius: 3px 3px 0 0;
+}
+.stop-photo img {
+  width: 100%; height: 100%;
+  object-fit: cover; display: block;
+  transition: transform 0.7s ease;
+}
+.stop-card:hover .stop-photo img { transform: scale(1.03); }
+.stop-photo-overlay {
+  position: absolute; inset: 0;
+  background: linear-gradient(to bottom,
+    rgba(26,21,16,0) 45%,
+    rgba(26,21,16,0.55) 100%);
+  pointer-events: none;
+}
+.stop-ghost-num {
+  position: absolute; top: 14px; right: 20px;
+  font-family: 'Cormorant Garamond', serif;
+  font-size: clamp(3.2rem,7vw,5.5rem);
+  font-weight: 300; color: rgba(245,237,224,0.5);
+  line-height: 1; pointer-events: none; z-index: 2;
+  letter-spacing: -0.02em;
+}
+.stop-photo-tag {
+  position: absolute; bottom: 16px; left: 20px;
+  font-size: 0.63rem; font-weight: 600;
+  letter-spacing: 0.2em; text-transform: uppercase;
+  color: var(--gold); z-index: 2;
+}
+.stop-body {
+  background: var(--dusk);
+  padding: clamp(26px,3.5vw,44px) clamp(22px,4vw,48px);
+  border-radius: 0 0 3px 3px;
+}
+.stop-body h3 {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: clamp(1.65rem,3.2vw,2.3rem);
+  font-weight: 300; color: var(--cream);
+  line-height: 1.12; margin-bottom: 12px;
+}
+.stop-body .tagline {
+  font-family: 'Cormorant Garamond', serif;
+  font-style: italic; font-size: 1.03rem;
+  color: rgba(245,237,224,0.48);
+  line-height: 1.55; margin-bottom: 16px;
+}
+.stop-body p.desc {
+  font-size: 0.87rem; line-height: 1.8;
+  color: rgba(245,237,224,0.68);
+  font-weight: 300; margin-bottom: 22px;
+  max-width: 72ch;
+}
+.fact-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip {
+  font-size: 0.69rem; font-weight: 400;
+  letter-spacing: 0.05em; color: var(--fog);
+  border: 1px solid rgba(143,168,190,0.22);
+  padding: 5px 12px; border-radius: 100px;
+  background: rgba(143,168,190,0.05);
+}
+.chip.gold {
+  color: var(--gold);
+  border-color: rgba(201,168,92,0.28);
+  background: rgba(201,168,92,0.06);
+}
+
+/* ── CONNECTOR ── */
+.connector {
+  max-width: 980px; margin: 0 auto;
+  padding: 0 clamp(24px,5vw,60px);
+}
+.connector-inner {
+  border-left: 1px solid rgba(201,168,92,0.28);
+  margin-left: 10px;
+  padding: 30px 0 30px 32px;
+  position: relative;
+}
+.connector-inner::before {
+  content: '';
+  position: absolute; top: 30px; left: -5px;
+  width: 9px; height: 9px; border-radius: 50%;
+  background: var(--gold);
+  box-shadow: 0 0 8px rgba(201,168,92,0.4);
+}
+.connector-inner::after {
+  content: '';
+  position: absolute; bottom: 30px; left: -5px;
+  width: 9px; height: 9px; border-radius: 50%;
+  background: rgba(201,168,92,0.3);
+  border: 1px solid var(--gold);
+}
+.connector-journey {
+  display: flex; align-items: flex-start; gap: 16px;
+  margin-bottom: 20px;
+}
+.journey-icon { font-size: 1.1rem; line-height: 1; margin-top: 2px; flex-shrink: 0; }
+.journey-time {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 1.3rem; font-weight: 300;
+  color: var(--dusk); line-height: 1;
+  margin-bottom: 3px;
+}
+.journey-detail { font-size: 0.71rem; color: var(--fog); letter-spacing: 0.06em; }
+.journey-note {
+  font-size: 0.75rem; font-weight: 300;
+  color: rgba(26,58,92,0.65);
+  margin-top: 5px; line-height: 1.5;
+  max-width: 55ch;
+}
+.sq-label {
+  font-size: 0.62rem; font-weight: 600;
+  letter-spacing: 0.2em; text-transform: uppercase;
+  color: var(--rust); margin-bottom: 12px;
+}
+.sidequests { display: flex; flex-wrap: wrap; gap: 10px; }
+.sidequest {
+  display: flex; align-items: flex-start; gap: 10px;
+  background: #f5ede8;
+  border: 1px solid rgba(184,92,58,0.13);
+  border-radius: 3px;
+  padding: 10px 14px;
+  width: clamp(200px, 28%, 260px);
+}
+.sq-icon { font-size: 1rem; line-height: 1; margin-top: 1px; flex-shrink: 0; }
+.sq-name { font-size: 0.79rem; font-weight: 500; color: var(--ink); line-height: 1.25; margin-bottom: 3px; }
+.sq-note { font-size: 0.69rem; color: #7a5a4a; font-weight: 300; line-height: 1.45; }
+
+/* ── PRACTICALITIES ── */
+.practical {
+  background: var(--dusk);
+  padding: 72px clamp(24px,6vw,80px);
+  margin-top: 72px;
+}
+.practical-inner { max-width: 980px; margin: 0 auto; }
+.practical h2 {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: clamp(2rem,4vw,2.8rem);
+  font-weight: 300; color: var(--cream);
+  margin-bottom: 48px; line-height: 1.1;
+}
+.practical-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px,1fr));
+  gap: 32px;
+}
+.pcard { border-left: 1px solid rgba(201,168,92,0.3); padding-left: 20px; }
+.pcard-title {
+  font-size: 0.67rem; font-weight: 600;
+  letter-spacing: 0.18em; text-transform: uppercase;
+  color: var(--gold); margin-bottom: 10px;
+}
+.pcard p { font-size: 0.86rem; line-height: 1.75; color: rgba(245,237,224,0.62); font-weight: 300; }
+
+/* ── FOOTER ── */
+footer { background: var(--ink); padding: 36px; text-align: center; }
+.footer-wm {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 1.35rem; font-weight: 300;
+  color: rgba(245,237,224,0.3); letter-spacing: 0.1em; margin-bottom: 6px;
+}
+.footer-sub { font-size: 0.65rem; letter-spacing: 0.14em; text-transform: uppercase; color: rgba(245,237,224,0.15); }
+
+/* ── LEAFLET ── */
+.leaflet-tooltip {
+  background: #2a1f3d !important;
+  border: 1px solid rgba(201,168,92,0.3) !important;
+  box-shadow: none !important;
+  border-radius: 2px !important;
+  padding: 0 !important;
+}
+.leaflet-tooltip::before { display: none !important; }
+
+@media (max-width: 560px) {
+  .sidequest { width: 100%; }
+  .hero-meta { gap: 20px; }
+}
+</style>
+</head>
+<body>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-bg"></div>
+  <div class="hero-overlay"></div>
+  <div class="hero-content">
+    <div class="route-badge">Roamer Route Guide</div>
+    <h1>Seven<br>Wonders<br><em>of the World</em></h1>
+    <div class="hero-meta">
+      <div class="hero-stat"><span class="num">24,900</span><span class="lbl">Miles, Mexico to China</span></div>
+      <div class="hero-stat"><span class="num">7</span><span class="lbl">Iconic Stops</span></div>
+      <div class="hero-stat"><span class="num">4–8</span><span class="lbl">Weeks Recommended</span></div>
+      <div class="hero-stat"><span class="num">7</span><span class="lbl">Countries</span></div>
+    </div>
+  </div>
+  <div class="scroll-cue"><div class="drip"></div>Scroll</div>
+</section>
+
+<!-- INTRO -->
+<section class="intro">
+  <p>From the jungle pyramids of Yucatán to the mountain ramparts of northern China, this is humanity's greatest argument for its own existence — <strong>seven monuments that outlasted the empires that built them</strong>, scattered across six continents and two thousand years of ambition, stubbornness, and stone. The route circles the globe. Follow it.</p>
+</section>
+
+<!-- MAP -->
+<section class="map-section">
+  <div class="eyebrow">The Route</div>
+  <div id="overview-map"></div>
+</section>
+
+<!-- STOPS HEADING -->
+<div class="stops-heading">
+  <h2>Seven stops.<br>One lap of the ancient world.</h2>
+</div>
+
+
+<!-- ══ STOP 1 ══ -->
+<article class="stop-card">
+  <div class="stop-photo">
+    <img src="https://images.unsplash.com/photo-1561577101-aa749bffbb70?q=80&w=2940&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D" alt="Chichen Itza, Mexico" loading="lazy">
+    <div class="stop-photo-overlay"></div>
+    <div class="stop-ghost-num">01</div>
+    <div class="stop-photo-tag">Stop 01 · The Pyramid</div>
+  </div>
+  <div class="stop-body">
+    <h3>Chichen Itza, Mexico</h3>
+    <p class="tagline">A Maya city-state that peaked a thousand years ago and built a calendar in stone. Twice a year, the sun turns the pyramid into a serpent.</p>
+    <p class="desc">El Castillo — the great stepped pyramid at the heart of Chichen Itza — is a 30-metre-high calendar encoded in architecture. Each of its four stairways has 91 steps; add the top platform and you get 365, one for every day of the solar year. The city flourished between 600 and 1200 AD as one of the dominant powers of the Maya world, and what remains — the Ball Court, the Temple of the Warriors, the cenote where offerings were cast into the earth — is still deeply imposing. Arrive at opening, before the tour buses. The spring and autumn equinoxes draw enormous crowds to watch the shadow serpent descend the northern stairway; it's worth planning around if the dates align. Valladolid, 40 minutes east, makes a better base than Cancún.</p>
+    <div class="fact-chips">
+      <span class="chip gold">El Castillo: built ~800–900 AD</span>
+      <span class="chip">Height: 30 m / 98 ft</span>
+      <span class="chip">UNESCO World Heritage since 1988</span>
+      <span class="chip">Best time: equinox, or just at dawn</span>
+      <span class="chip">Don't miss: the Gran Cenote, Valladolid</span>
+    </div>
+  </div>
+</article>
+
+<!-- CONNECTOR 1→2 -->
+<div class="connector"><div class="connector-inner">
+  <div class="connector-journey">
+    <span class="journey-icon">✈️</span>
+    <div class="journey-main">
+      <div class="journey-time">Fly to Cusco via Lima</div>
+      <div class="journey-detail">~7–9 hrs total · Cancún (CUN) → Lima (LIM) → Cusco (CUZ)</div>
+      <div class="journey-note">No direct route connects Yucatán to the Peruvian Andes — Lima is the standard connection. Spend a night in the capital if the layover allows; Miraflores is polished and easy. Cusco sits at 3,400 metres; allow a full day to acclimatise before doing anything strenuous.</div>
+    </div>
+  </div>
+  <div class="sq-label">Worth the Detour</div>
+  <div class="sidequests">
+    <div class="sidequest"><span class="sq-icon">🌊</span><div><div class="sq-name">Tulum, Mexico</div><div class="sq-note">Cliff-top Maya ruins above a Caribbean beach. Stay in the jungle side of town to avoid the resort strip and still be five minutes from the sea.</div></div></div>
+    <div class="sidequest"><span class="sq-icon">🦎</span><div><div class="sq-name">Palenque, Mexico</div><div class="sq-note">Deep jungle ruins in Chiapas with elaborate carved reliefs and a royal tomb discovered intact in 1952. Less visited than Chichen; more atmospheric.</div></div></div>
+    <div class="sidequest"><span class="sq-icon">🏙️</span><div><div class="sq-name">Mexico City</div><div class="sq-note">If you're routing through the capital: Teotihuacán, the National Anthropology Museum, and the food scene in Roma Norte alone justify a three-night stay.</div></div></div>
+  </div>
+</div></div>
+
+<!-- ══ STOP 2 ══ -->
+<article class="stop-card">
+  <div class="stop-photo">
+    <img src="https://images.unsplash.com/photo-1526392060635-9d6019884377?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w4ODQ4OTB8MHwxfHNlYXJjaHwxfHxNYWNodSUyMFBpY2NodSUyQyUyMFBlcnV8ZW58MXwwfHx8MTc3MjM5MjMyNnww&ixlib=rb-4.1.0&q=80&w=1080" alt="Machu Picchu, Peru" loading="lazy">
+    <div class="stop-photo-overlay"></div>
+    <div class="stop-ghost-num">02</div>
+    <div class="stop-photo-tag">Stop 02 · The Lost City</div>
+  </div>
+  <div class="stop-body">
+    <h3>Machu Picchu, Peru</h3>
+    <p class="tagline">An Inca royal estate built at 2,430 metres and abandoned after the Spanish conquest — then left alone for 400 years while the cloud forest grew back around it.</p>
+    <p class="desc">Machu Picchu was never lost to the local Quechua communities; it was simply unknown to the outside world until Hiram Bingham arrived in 1911. What he found — a nearly intact 15th-century Inca citadel perched on a narrow ridge above the Urubamba River, its stone terraces and temples fitted together without mortar to a precision that still baffles engineers — remains one of the most extraordinary things on earth. The Inca Trail, four days through high Andean passes, is the classic approach if booked months in advance. The train from Cusco to Aguas Calientes is equally spectacular and considerably easier. Book entry tickets before you leave home; daily visitor numbers are capped and sell out consistently.</p>
+    <div class="fact-chips">
+      <span class="chip gold">Built: ~1450 AD, Inca Empire</span>
+      <span class="chip">Altitude: 2,430 m / 7,972 ft</span>
+      <span class="chip">UNESCO World Heritage since 1983</span>
+      <span class="chip">Inca Trail: book 6+ months ahead</span>
+      <span class="chip">Don't miss: Sun Gate at dawn</span>
+    </div>
+  </div>
+</article>
+
+<!-- CONNECTOR 2→3 -->
+<div class="connector"><div class="connector-inner">
+  <div class="connector-journey">
+    <span class="journey-icon">✈️</span>
+    <div class="journey-main">
+      <div class="journey-time">Fly to Rio de Janeiro via Lima</div>
+      <div class="journey-detail">~8–10 hrs total · Cusco (CUZ) → Lima (LIM) → Rio (GIG)</div>
+      <div class="journey-note">Lima again as the connecting hub — the South American geography makes this unavoidable unless you're routing via São Paulo. Land at Galeão (GIG) rather than Santos Dumont for international flights; the drive into the city along the coast road sets the scene immediately.</div>
+    </div>
+  </div>
+  <div class="sq-label">Worth the Detour</div>
+  <div class="sidequests">
+    <div class="sidequest"><span class="sq-icon">🧂</span><div><div class="sq-name">Salar de Uyuni, Bolivia</div><div class="sq-note">The world's largest salt flat, 3,650 metres up on the Bolivian altiplano. In the wet season, a thin film of water turns it into the world's largest mirror.</div></div></div>
+    <div class="sidequest"><span class="sq-icon">🌿</span><div><div class="sq-name">Amazon Basin, Peru</div><div class="sq-note">Iquitos is the gateway: a city reachable only by air or river, a reminder that most of this continent is still jungle. Lodge stays from two to seven nights.</div></div></div>
+    <div class="sidequest"><span class="sq-icon">🌊</span><div><div class="sq-name">Lima, Peru</div><div class="sq-note">Often dismissed as a transit city; don't. The food scene in Miraflores and Barranco is genuinely world-class, and the Larco Museum holds the finest pre-Columbian collection in South America.</div></div></div>
+  </div>
+</div></div>
+
+<!-- ══ STOP 3 ══ -->
+<article class="stop-card">
+  <div class="stop-photo">
+    <img src="https://images.unsplash.com/photo-1683331404237-64c763c70f5b?q=80&w=927&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D" alt="Christ the Redeemer, Rio de Janeiro" loading="lazy">
+    <div class="stop-photo-overlay"></div>
+    <div class="stop-ghost-num">03</div>
+    <div class="stop-photo-tag">Stop 03 · The Redeemer</div>
+  </div>
+  <div class="stop-body">
+    <h3>Christ the Redeemer, Rio de Janeiro, Brazil</h3>
+    <p class="tagline">A 30-metre statue with a 28-metre wingspan, standing on a peak above one of the world's most extravagant cities. The arms are open. The view goes in every direction.</p>
+    <p class="desc">Cristo Redentor was completed in 1931, built from reinforced concrete and soapstone by a Franco-Brazilian team, and it has watched over Rio ever since from the 710-metre summit of Corcovado. The statue is the punctuation mark the city deserves: a figure of total acceptance presiding over a place that operates at maximum intensity — Carnival, futebol, the favelas stepping up the hillsides, Ipanema beach at sunset, the samba in Lapa until four in the morning. Take the rack railway up through Tijuca Forest rather than the van. Book timed entry online. Then give Rio itself four days, which is the minimum to stop feeling like a tourist and start feeling like someone who almost lives here.</p>
+    <div class="fact-chips">
+      <span class="chip gold">Completed: 1931</span>
+      <span class="chip">Height: 30 m statue + 8 m plinth</span>
+      <span class="chip">UNESCO World Heritage since 2012</span>
+      <span class="chip">Best light: late afternoon, facing west</span>
+      <span class="chip">Don't miss: Tijuca Forest rack railway</span>
+    </div>
+  </div>
+</article>
+
+<!-- CONNECTOR 3→4 -->
+<div class="connector"><div class="connector-inner">
+  <div class="connector-journey">
+    <span class="journey-icon">✈️</span>
+    <div class="journey-main">
+      <div class="journey-time">Fly to Rome</div>
+      <div class="journey-detail">~11–12 hrs · Rio de Janeiro (GIG) → Rome (FCO)</div>
+      <div class="journey-note">The transatlantic leg: direct flights exist on several carriers from Galeão to Fiumicino, overnight being the most efficient use of the time. Arrive in the morning, take the Leonardo Express to Termini, and be eating cacio e pepe by lunch. The distance is the biggest single jump on this route — everything else is shorter.</div>
+    </div>
+  </div>
+  <div class="sq-label">Worth the Detour</div>
+  <div class="sidequests">
+    <div class="sidequest"><span class="sq-icon">🎭</span><div><div class="sq-name">Buenos Aires, Argentina</div><div class="sq-note">A three-hour flight south of Rio. The most European city in South America, with the best steak, a serious tango scene, and bookshops occupying former theatres.</div></div></div>
+    <div class="sidequest"><span class="sq-icon">🌊</span><div><div class="sq-name">Iguazú Falls, Brazil/Argentina</div><div class="sq-note">The world's widest waterfall system, straddling the border. Eleanor Roosevelt, on seeing it, allegedly remarked that Niagara was suddenly very small.</div></div></div>
+    <div class="sidequest"><span class="sq-icon">🏖️</span><div><div class="sq-name">Paraty & Costa Verde, Brazil</div><div class="sq-note">A colonial port town four hours south of Rio, with white-painted cobbled streets and a scattering of Atlantic Forest islands visible from the harbour.</div></div></div>
+  </div>
+</div></div>
+
+<!-- ══ STOP 4 ══ -->
+<article class="stop-card">
+  <div class="stop-photo">
+    <img src="https://images.unsplash.com/photo-1552832230-c0197dd311b5?q=80&w=1592&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D" alt="Colosseum, Rome, Italy" loading="lazy">
+    <div class="stop-photo-overlay"></div>
+    <div class="stop-ghost-num">04</div>
+    <div class="stop-photo-tag">Stop 04 · The Arena</div>
+  </div>
+  <div class="stop-body">
+    <h3>Colosseum, Rome, Italy</h3>
+    <p class="tagline">Fifty thousand Romans watched gladiators die here. Two thousand years later, fifty thousand tourists a day come to look at the place where it happened.</p>
+    <p class="desc">The Flavian Amphitheatre was completed in 80 AD, capable of filling and emptying 50,000 spectators through 80 vaulted entrances in minutes — a feat of logistical engineering that modern stadium architects still study. It held over 400 years of games: gladiatorial combat, beast hunts, mock sea battles when the floor was flooded. What remains — roughly two-thirds of the original structure — is still the largest amphitheatre ever built, and standing on the arena floor looking up at the tiered seating is an experience that doesn't diminish with familiarity. Book the underground tour to see the hypogeum, the labyrinth of tunnels where animals and fighters waited. Then spend the rest of the week in Rome, because Rome is inexhaustible.</p>
+    <div class="fact-chips">
+      <span class="chip gold">Completed: 80 AD, Emperor Titus</span>
+      <span class="chip">Capacity: ~50,000–80,000 spectators</span>
+      <span class="chip">UNESCO World Heritage since 1980</span>
+      <span class="chip">Book: underground hypogeum tour</span>
+      <span class="chip">Don't miss: Forum Romanum at dusk</span>
+    </div>
+  </div>
+</article>
+
+<!-- CONNECTOR 4→5 -->
+<div class="connector"><div class="connector-inner">
+  <div class="connector-journey">
+    <span class="journey-icon">✈️</span>
+    <div class="journey-main">
+      <div class="journey-time">Fly to Amman, then drive to Petra</div>
+      <div class="journey-detail">~4 hrs flying · Rome (FCO) → Amman (AMM) · then ~3 hrs by road to Wadi Musa</div>
+      <div class="journey-note">Queen Alia airport to Petra is a three-hour drive through the desert south — rent a car or take a shared taxi from Amman. Wadi Musa is the village at Petra's gate; stay there rather than making it a day trip. Two nights minimum, three gives you the time to see the monument at its least crowded.</div>
+    </div>
+  </div>
+  <div class="sq-label">Worth the Detour</div>
+  <div class="sidequests">
+    <div class="sidequest"><span class="sq-icon">🏛️</span><div><div class="sq-name">Athens, Greece</div><div class="sq-note">An obvious add-on from Rome: the Acropolis, the National Archaeological Museum, and the neighbourhood of Monastiraki. The Parthenon predates the Colosseum by five centuries.</div></div></div>
+    <div class="sidequest"><span class="sq-icon">🌊</span><div><div class="sq-name">Wadi Rum, Jordan</div><div class="sq-note">The desert valley an hour south of Petra, where Lawrence of Arabia was filmed and where Jordanian Bedouin run overnight camp stays under the most unobstructed stars in the region.</div></div></div>
+    <div class="sidequest"><span class="sq-icon">🏰</span><div><div class="sq-name">Jerash, Jordan</div><div class="sq-note">The best-preserved Roman provincial city outside Italy, an hour north of Amman. Two thousand years of colonnaded streets, still largely intact and mostly empty of other visitors.</div></div></div>
+  </div>
+</div></div>
+
+<!-- ══ STOP 5 ══ -->
+<article class="stop-card">
+  <div class="stop-photo">
+    <img src="https://images.unsplash.com/photo-1530624852-9beb898b2820?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w4ODQ4OTB8MHwxfHNlYXJjaHw3fHxQZXRyYXxlbnwxfDB8fHwxNzcyMzQxMzc5fDA&ixlib=rb-4.1.0&q=80&w=1080" alt="Petra, Jordan" loading="lazy">
+    <div class="stop-photo-overlay"></div>
+    <div class="stop-ghost-num">05</div>
+    <div class="stop-photo-tag">Stop 05 · The Rose City</div>
+  </div>
+  <div class="stop-body">
+    <h3>Petra, Jordan</h3>
+    <p class="tagline">A Nabataean trading capital carved directly into rose-red sandstone cliffs, hidden by geography for centuries. The Treasury façade is only the entrance.</p>
+    <p class="desc">The Siq — a 1.2-kilometre slot canyon, walls rising 80 metres overhead, barely wide enough for two camels to pass — is one of the great approach sequences in architecture. At its end, through a narrowing gap, the Treasury appears: a 40-metre Hellenistic façade cut with extraordinary precision into the rock face around 100 BC. But the Treasury is only the beginning. Petra extends for 60 square kilometres of carved tombs, temples, colonnaded streets, and water channels engineered to supply a city of 20,000 people in desert conditions. The Monastery — larger than the Treasury, reachable by 800 rock-cut steps — is the less visited payoff for those who make the climb. Petra by Night, three times a week, fills the Siq with candlelight.</p>
+    <div class="fact-chips">
+      <span class="chip gold">Founded: ~4th century BC, Nabataean</span>
+      <span class="chip">Area: 60 sq km of carved monuments</span>
+      <span class="chip">UNESCO World Heritage since 1985</span>
+      <span class="chip">Best: The Monastery, 800 steps up</span>
+      <span class="chip">Don't miss: Petra by Night (Mon/Wed/Thu)</span>
+    </div>
+  </div>
+</article>
+
+<!-- CONNECTOR 5→6 -->
+<div class="connector"><div class="connector-inner">
+  <div class="connector-journey">
+    <span class="journey-icon">✈️</span>
+    <div class="journey-main">
+      <div class="journey-time">Fly to Delhi, then train to Agra</div>
+      <div class="journey-detail">~6 hrs flying · Amman (AMM) → Delhi (DEL) · then ~2–3 hrs by express train to Agra</div>
+      <div class="journey-note">The Gatimaan Express from Hazrat Nizamuddin station reaches Agra Cantonment in under two hours — the fastest and most comfortable connection. Book train tickets through Indian Railways well in advance; unreserved carriages are a different experience entirely. Agra is primarily a Taj stop; base yourself here for two nights before continuing east or returning to Delhi.</div>
+    </div>
+  </div>
+  <div class="sq-label">Worth the Detour</div>
+  <div class="sidequests">
+    <div class="sidequest"><span class="sq-icon">🕌</span><div><div class="sq-name">Wadi Al-Hitan, Egypt</div><div class="sq-note">If routing via Cairo: the Valley of the Whales, a UNESCO site two hours into the Western Desert where fossilised whale skeletons mark the shoreline of an ancient sea.</div></div></div>
+    <div class="sidequest"><span class="sq-icon">🏔️</span><div><div class="sq-name">Varanasi, India</div><div class="sq-note">The oldest continuously inhabited city on earth, on the banks of the Ganges. The dawn boat ride past the burning ghats is one of the most intense and irreducible experiences on this entire route.</div></div></div>
+    <div class="sidequest"><span class="sq-icon">🏰</span><div><div class="sq-name">Jaipur, India</div><div class="sq-note">The Pink City, completing India's Golden Triangle with Delhi and Agra. The Amber Fort, the City Palace, the Hawa Mahal — each worth the afternoon it takes to properly see it.</div></div></div>
+  </div>
+</div></div>
+
+<!-- ══ STOP 6 ══ -->
+<article class="stop-card">
+  <div class="stop-photo">
+    <img src="https://images.unsplash.com/photo-1548013146-72479768bada?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w4ODQ4OTB8MHwxfHNlYXJjaHwyfHxBZ3JhfGVufDF8MHx8fDE3NzIzMzU3ODF8MA&ixlib=rb-4.1.0&q=80&w=1080" alt="Taj Mahal, Agra, India" loading="lazy">
+    <div class="stop-photo-overlay"></div>
+    <div class="stop-ghost-num">06</div>
+    <div class="stop-photo-tag">Stop 06 · The Mausoleum</div>
+  </div>
+  <div class="stop-body">
+    <h3>Taj Mahal, Agra, India</h3>
+    <p class="tagline">Commissioned by a Mughal emperor as a tomb for his wife. Twenty thousand workers and twenty-two years. The white marble changes colour with the light all day.</p>
+    <p class="desc">Shah Jahan began the Taj Mahal in 1632, the year after his wife Mumtaz Mahal died in childbirth bearing their fourteenth child. What he built — a 73-metre white marble mausoleum on the south bank of the Yamuna, flanked by four minarets that lean very slightly outward (so they fall away from the tomb in an earthquake), surrounded by formal gardens in the Quranic tradition — is still, arguably, the most beautiful building on earth. The marble is not white but translucent: at dawn it is pink, at noon it is blinding, at dusk it is amber. The inlaid semi-precious stonework on the interior is extraordinary. Come for opening, at sunrise, to see the reflection in the central pool before the crowds arrive. Then come back at sunset.</p>
+    <div class="fact-chips">
+      <span class="chip gold">Completed: 1653, Mughal Empire</span>
+      <span class="chip">Built by: ~20,000 artisans over 22 years</span>
+      <span class="chip">UNESCO World Heritage since 1983</span>
+      <span class="chip">Best light: sunrise and sunset</span>
+      <span class="chip">Closed on Fridays</span>
+    </div>
+  </div>
+</article>
+
+<!-- CONNECTOR 6→7 -->
+<div class="connector"><div class="connector-inner">
+  <div class="connector-journey">
+    <span class="journey-icon">✈️</span>
+    <div class="journey-main">
+      <div class="journey-time">Fly to Beijing</div>
+      <div class="journey-detail">~5–6 hrs · Delhi (DEL) → Beijing (PEK)</div>
+      <div class="journey-note">Direct flights operate daily from Indira Gandhi International. Note that a Chinese visa is required for most nationalities and must be arranged well in advance — allow at least four weeks and do not underestimate the paperwork. Download and test your VPN before arrival: Google, WhatsApp, and Instagram do not function in mainland China without one.</div>
+    </div>
+  </div>
+  <div class="sq-label">Worth the Detour</div>
+  <div class="sidequests">
+    <div class="sidequest"><span class="sq-icon">🗿</span><div><div class="sq-name">Xi'an, China</div><div class="sq-note">The Terracotta Army: 8,000 life-size warriors buried with the first Qin emperor in 210 BC and discovered by farmers in 1974. An easy high-speed rail leg from Beijing.</div></div></div>
+    <div class="sidequest"><span class="sq-icon">🏮</span><div><div class="sq-name">Shanghai, China</div><div class="sq-note">The Bund at night, the French Concession by day, and a food scene that would justify a separate trip entirely. Route through here on the way back if the itinerary allows.</div></div></div>
+    <div class="sidequest"><span class="sq-icon">🌸</span><div><div class="sq-name">Zhangjiajie, China</div><div class="sq-note">The floating sandstone pillars that inspired the mountains in Avatar. Surreal from any angle, and largely unknown outside Asia until recently.</div></div></div>
+  </div>
+</div></div>
+
+<!-- ══ STOP 7 ══ -->
+<article class="stop-card">
+  <div class="stop-photo">
+    <img src="https://images.unsplash.com/photo-1508804185872-d7badad00f7d?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w4ODQ4OTB8MHwxfHNlYXJjaHw1fHxCZWlqaW5nfGVufDF8MHx8fDE3NzIzMzU3ODl8MA&ixlib=rb-4.1.0&q=80&w=1080" alt="Great Wall of China, Beijing" loading="lazy">
+    <div class="stop-photo-overlay"></div>
+    <div class="stop-ghost-num">07</div>
+    <div class="stop-photo-tag">Stop 07 · The Wall</div>
+  </div>
+  <div class="stop-body">
+    <h3>Great Wall of China, Beijing</h3>
+    <p class="tagline">13,000 miles of wall across mountains, deserts, and plateaus, built across twenty centuries by a civilisation determined to define the edge of the known world.</p>
+    <p class="desc">The Great Wall is not a single wall but an accretion of walls, built and rebuilt by successive dynasties over 2,000 years — the earliest sections date to the 7th century BC, the most photographed to the Ming dynasty (1368–1644). The total length of all walls combined is estimated at over 21,000 kilometres. The Badaling section, closest to Beijing, receives more visitors than anywhere else; Mutianyu, an hour further northeast, offers a better-preserved stretch with a cable car up and a toboggan run down, and dramatically fewer crowds. The most rewarding — and least visited — sections require overnight treks to remote watchtowers. The arc ends here, at the northern edge of China, with the wall running east and west into the mountains as far as the horizon. This is where the ancient world drew its line.</p>
+    <div class="fact-chips">
+      <span class="chip gold">Total length: ~21,196 km across all sections</span>
+      <span class="chip">Construction: 7th century BC – 17th century AD</span>
+      <span class="chip">UNESCO World Heritage since 1987</span>
+      <span class="chip">Best section: Mutianyu (fewer crowds)</span>
+      <span class="chip">Don't miss: overnight trek to remote towers</span>
+    </div>
+  </div>
+</article>
+
+
+<!-- PRACTICALITIES -->
+<section class="practical">
+  <div class="practical-inner">
+    <h2>Before you go.</h2>
+    <div class="practical-grid">
+      <div class="pcard">
+        <div class="pcard-title">Visas</div>
+        <p>China requires a visa for most nationalities — apply at least four weeks in advance. India requires an e-Visa, straightforward to obtain online. Jordan issues visas on arrival. Brazil, Mexico, and Peru are visa-free for most western passports. Italy (Schengen) is open to most nationalities for 90 days. Check every passport individually; the rules change and vary significantly by nationality.</p>
+      </div>
+      <div class="pcard">
+        <div class="pcard-title">The China Firewall</div>
+        <p>Google, Instagram, WhatsApp, and most western apps are blocked in mainland China. Download and fully test your VPN before entering — it is significantly harder to install once you're inside the country. Keep a local SIM with data as backup. Hong Kong currently operates differently, but conditions there are evolving.</p>
+      </div>
+      <div class="pcard">
+        <div class="pcard-title">Best Season</div>
+        <p>This route spans every climate zone and hemisphere, which makes a single "best time" impossible. The practical answer: plan around India (October–March, avoiding monsoon) and China (April–May or September–October, avoiding summer smog and crowds). The Americas work year-round with minor adjustments for Machu Picchu's wet season (December–March).</p>
+      </div>
+      <div class="pcard">
+        <div class="pcard-title">Booking Ahead</div>
+        <p>Three stops require advance booking and will close you out if you don't: the Inca Trail to Machu Picchu (book 6+ months ahead), Taj Mahal timed entry (book online before departure), and the Colosseum underground tour (often sold out weeks in advance). The rest are more forgiving, but Petra by Night also fills up in high season.</p>
+      </div>
+      <div class="pcard">
+        <div class="pcard-title">Money</div>
+        <p>Seven countries, seven currencies. Cards work widely in Italy, Jordan, and urban China (though China increasingly prefers WeChat Pay/Alipay, which require a local bank account — carry yuan). Cash remains essential in Mexico, Peru, Brazil, and India outside major cities. Withdraw at airport ATMs on arrival; exchange rates at hotels are consistently poor.</p>
+      </div>
+      <div class="pcard">
+        <div class="pcard-title">How Long You Really Need</div>
+        <p>Four weeks is the absolute minimum; six is realistic for not feeling like you're sprinting between airports. Each wonder deserves more time than most itineraries allow: Petra rewards three nights, Machu Picchu at least two, and Beijing is vast enough to absorb a week without repetition. The biggest single mistake people make on this route is booking the flights before understanding the distances.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="footer-wm">Roamer</div>
+  <div class="footer-sub">Daily Route Guides</div>
+</footer>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+
+  const stops = [
+    { name: "Chichen Itza, Mexico",                       lat: 20.682852,  lng: -88.568720 },
+    { name: "Machu Picchu, Peru",                         lat: -13.164341, lng: -72.545009 },
+    { name: "Christ the Redeemer, Rio de Janeiro",        lat: -22.951917, lng: -43.210459 },
+    { name: "Colosseum, Rome, Italy",                     lat: 41.890942,  lng: 12.491903  },
+    { name: "Petra, Jordan",                              lat: 30.325836,  lng: 35.474567  },
+    { name: "Taj Mahal, Agra, India",                     lat: 27.175007,  lng: 78.042101  },
+    { name: "Great Wall of China, Beijing",               lat: 40.476259,  lng: 116.173230 },
+  ];
+
+  const map = L.map('overview-map', {
+    zoomControl: true,
+    scrollWheelZoom: false,
+    attributionControl: false,
+  });
+
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    maxZoom: 14
+  }).addTo(map);
+
+  const latlngs = stops.map(s => [s.lat, s.lng]);
+  const poly = L.polyline(latlngs, {
+    color: '#c9a85c', weight: 2, opacity: 0.7, dashArray: '6,6'
+  }).addTo(map);
+
+  const goldIcon = L.divIcon({
+    className: '',
+    html: `<div style="width:9px;height:9px;background:#c9a85c;border-radius:50%;border:2px solid rgba(245,237,224,.75);box-shadow:0 0 7px rgba(201,168,92,.5)"></div>`,
+    iconSize: [9,9], iconAnchor: [4.5,4.5]
+  });
+
+  stops.forEach((s, i) => {
+    L.marker([s.lat, s.lng], { icon: goldIcon }).addTo(map)
+     .bindTooltip(
+       `<span style="font-family:Jost,sans-serif;font-size:12px;color:#f5ede0;padding:4px 8px;display:block">${i+1}. ${s.name}</span>`,
+       { direction: 'right' }
+     );
+  });
+
+  map.fitBounds(poly.getBounds(), { padding: [28,28] });
+
+  const cards = document.querySelectorAll('.stop-card');
+  const io = new IntersectionObserver(entries => {
+    entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible'); });
+  }, { threshold: 0.08 });
+  cards.forEach(c => io.observe(c));
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,703 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Eastern Arc — Roamer Route Guide</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300;1,400&family=Jost:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --cream: #fdf8f2;
+  --ink:   #1a1510;
+  --dusk:  #2a1f3d;
+  --ocean: #1a3a5c;
+  --fog:   #8fa8be;
+  --gold:  #c9a85c;
+  --rust:  #b85c3a;
+  --sage:  #7a9e87;
+}
+
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--cream);
+  color: var(--ink);
+  font-family: 'Jost', sans-serif;
+  font-weight: 300;
+  overflow-x: hidden;
+}
+
+/* ── HERO ── */
+.hero {
+  position: relative;
+  height: 100vh;
+  min-height: 600px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  overflow: hidden;
+}
+.hero-bg {
+  position: absolute; inset: 0;
+  background: url('https://images.unsplash.com/photo-1526481280693-3bfa7568e0f3?q=80&w=1771&auto=format&fit=crop') center 50% / cover no-repeat;
+  animation: slowZoom 20s ease-in-out infinite alternate;
+}
+@keyframes slowZoom {
+  from { transform: scale(1.0); }
+  to   { transform: scale(1.06); }
+}
+.hero-overlay {
+  position: absolute; inset: 0;
+  background: linear-gradient(to bottom,
+    rgba(26,21,16,0.02) 0%,
+    rgba(26,21,16,0.08) 45%,
+    rgba(26,21,16,0.78) 75%,
+    rgba(26,21,16,0.93) 100%);
+}
+.hero-content {
+  position: relative; z-index: 2;
+  padding: clamp(36px,5vw,72px) clamp(28px,6vw,80px);
+  max-width: 820px;
+}
+.route-badge {
+  display: inline-flex; align-items: center; gap: 10px;
+  font-size: 0.68rem; font-weight: 500;
+  letter-spacing: 0.2em; text-transform: uppercase;
+  color: var(--gold); margin-bottom: 18px;
+}
+.route-badge::before {
+  content: ''; display: block;
+  width: 22px; height: 1px; background: var(--gold);
+}
+.hero h1 {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: clamp(3.2rem, 8vw, 7rem);
+  font-weight: 300; line-height: 0.9;
+  color: var(--cream); letter-spacing: -0.01em;
+  margin-bottom: 28px;
+}
+.hero h1 em { font-style: italic; color: rgba(245,237,224,0.58); }
+.hero-meta { display: flex; gap: 32px; flex-wrap: wrap; }
+.hero-stat { display: flex; flex-direction: column; gap: 3px; }
+.hero-stat .num {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 1.85rem; font-weight: 300;
+  color: var(--cream); line-height: 1;
+}
+.hero-stat .lbl {
+  font-size: 0.65rem; font-weight: 500;
+  letter-spacing: 0.15em; text-transform: uppercase;
+  color: var(--fog);
+}
+.scroll-cue {
+  position: absolute; bottom: 32px; right: clamp(28px,6vw,80px);
+  z-index: 2; display: flex; flex-direction: column;
+  align-items: center; gap: 8px;
+  color: rgba(245,237,224,0.4); font-size: 0.62rem;
+  letter-spacing: 0.15em; text-transform: uppercase;
+  animation: fadeIn 2s 1.2s both;
+}
+.scroll-cue .drip {
+  width: 1px; height: 44px;
+  background: linear-gradient(to bottom, transparent, rgba(245,237,224,0.4));
+  animation: drip 2.4s 1.4s ease-in-out infinite;
+}
+@keyframes drip {
+  0%,100% { transform: scaleY(1); opacity: 0.4; }
+  55% { transform: scaleY(1.35); opacity: 0.9; }
+}
+@keyframes fadeIn { from { opacity:0; } to { opacity:1; } }
+
+/* ── INTRO ── */
+.intro {
+  max-width: 740px;
+  margin: 80px auto 0;
+  padding: 0 clamp(24px,5vw,60px);
+}
+.intro p {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: clamp(1.3rem, 2.6vw, 1.75rem);
+  font-weight: 300; line-height: 1.68;
+  color: var(--ocean);
+}
+.intro p strong { font-weight: 400; color: var(--rust); }
+
+/* ── OVERVIEW MAP ── */
+.map-section {
+  margin: 64px auto;
+  max-width: 980px;
+  padding: 0 clamp(24px,5vw,60px);
+}
+.eyebrow {
+  font-size: 0.66rem; font-weight: 500;
+  letter-spacing: 0.2em; text-transform: uppercase;
+  color: var(--fog); margin-bottom: 14px;
+  display: flex; align-items: center; gap: 12px;
+}
+.eyebrow::after {
+  content: ''; flex: 1; height: 1px;
+  background: linear-gradient(to right, rgba(143,168,190,0.35), transparent);
+}
+#overview-map {
+  width: 100%; height: 340px;
+  border-radius: 3px; overflow: hidden;
+  border: 1px solid rgba(42,31,61,0.09);
+}
+
+/* ── STOPS HEADING ── */
+.stops-heading {
+  max-width: 980px; margin: 0 auto 52px;
+  padding: 0 clamp(24px,5vw,60px);
+}
+.stops-heading h2 {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: clamp(2rem,4vw,2.9rem);
+  font-weight: 300; color: var(--dusk); line-height: 1.1;
+}
+
+/* ── STOP CARD ── */
+.stop-card {
+  max-width: 980px; margin: 0 auto;
+  padding: 0 clamp(24px,5vw,60px);
+  opacity: 0; transform: translateY(20px);
+  transition: opacity 0.65s ease, transform 0.65s ease;
+}
+.stop-card.visible { opacity: 1; transform: none; }
+
+.stop-photo {
+  position: relative;
+  width: 100%;
+  height: clamp(240px, 40vw, 460px);
+  overflow: hidden;
+  border-radius: 3px 3px 0 0;
+}
+.stop-photo img {
+  width: 100%; height: 100%;
+  object-fit: cover; display: block;
+  transition: transform 0.7s ease;
+}
+.stop-card:hover .stop-photo img { transform: scale(1.03); }
+.stop-photo-overlay {
+  position: absolute; inset: 0;
+  background: linear-gradient(to bottom,
+    rgba(26,21,16,0) 45%,
+    rgba(26,21,16,0.55) 100%);
+  pointer-events: none;
+}
+.stop-ghost-num {
+  position: absolute; top: 14px; right: 20px;
+  font-family: 'Cormorant Garamond', serif;
+  font-size: clamp(3.2rem,7vw,5.5rem);
+  font-weight: 300; color: rgba(245,237,224,0.5);
+  line-height: 1; pointer-events: none; z-index: 2;
+  letter-spacing: -0.02em;
+}
+.stop-photo-tag {
+  position: absolute; bottom: 16px; left: 20px;
+  font-size: 0.63rem; font-weight: 600;
+  letter-spacing: 0.2em; text-transform: uppercase;
+  color: var(--gold); z-index: 2;
+}
+.stop-body {
+  background: var(--dusk);
+  padding: clamp(26px,3.5vw,44px) clamp(22px,4vw,48px);
+  border-radius: 0 0 3px 3px;
+}
+.stop-body h3 {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: clamp(1.65rem,3.2vw,2.3rem);
+  font-weight: 300; color: var(--cream);
+  line-height: 1.12; margin-bottom: 12px;
+}
+.stop-body .tagline {
+  font-family: 'Cormorant Garamond', serif;
+  font-style: italic; font-size: 1.03rem;
+  color: rgba(245,237,224,0.48);
+  line-height: 1.55; margin-bottom: 16px;
+}
+.stop-body p.desc {
+  font-size: 0.87rem; line-height: 1.8;
+  color: rgba(245,237,224,0.68);
+  font-weight: 300; margin-bottom: 22px;
+  max-width: 72ch;
+}
+.fact-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip {
+  font-size: 0.69rem; font-weight: 400;
+  letter-spacing: 0.05em; color: var(--fog);
+  border: 1px solid rgba(143,168,190,0.22);
+  padding: 5px 12px; border-radius: 100px;
+  background: rgba(143,168,190,0.05);
+}
+.chip.gold {
+  color: var(--gold);
+  border-color: rgba(201,168,92,0.28);
+  background: rgba(201,168,92,0.06);
+}
+
+/* ── CONNECTOR ── */
+.connector {
+  max-width: 980px; margin: 0 auto;
+  padding: 0 clamp(24px,5vw,60px);
+}
+.connector-inner {
+  border-left: 1px solid rgba(201,168,92,0.28);
+  margin-left: 10px;
+  padding: 30px 0 30px 32px;
+  position: relative;
+}
+.connector-inner::before {
+  content: '';
+  position: absolute; top: 30px; left: -5px;
+  width: 9px; height: 9px; border-radius: 50%;
+  background: var(--gold);
+  box-shadow: 0 0 8px rgba(201,168,92,0.4);
+}
+.connector-inner::after {
+  content: '';
+  position: absolute; bottom: 30px; left: -5px;
+  width: 9px; height: 9px; border-radius: 50%;
+  background: rgba(201,168,92,0.3);
+  border: 1px solid var(--gold);
+}
+.connector-journey {
+  display: flex; align-items: flex-start; gap: 16px;
+  margin-bottom: 20px;
+}
+.journey-icon { font-size: 1.1rem; line-height: 1; margin-top: 2px; flex-shrink: 0; }
+.journey-time {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 1.3rem; font-weight: 300;
+  color: var(--dusk); line-height: 1;
+  margin-bottom: 3px;
+}
+.journey-detail { font-size: 0.71rem; color: var(--fog); letter-spacing: 0.06em; }
+.journey-note {
+  font-size: 0.75rem; font-weight: 300;
+  color: rgba(26,58,92,0.65);
+  margin-top: 5px; line-height: 1.5;
+  max-width: 55ch;
+}
+.sq-label {
+  font-size: 0.62rem; font-weight: 600;
+  letter-spacing: 0.2em; text-transform: uppercase;
+  color: var(--rust); margin-bottom: 12px;
+}
+.sidequests { display: flex; flex-wrap: wrap; gap: 10px; }
+.sidequest {
+  display: flex; align-items: flex-start; gap: 10px;
+  background: #f5ede8;
+  border: 1px solid rgba(184,92,58,0.13);
+  border-radius: 3px;
+  padding: 10px 14px;
+  width: clamp(200px, 28%, 260px);
+}
+.sq-icon { font-size: 1rem; line-height: 1; margin-top: 1px; flex-shrink: 0; }
+.sq-name { font-size: 0.79rem; font-weight: 500; color: var(--ink); line-height: 1.25; margin-bottom: 3px; }
+.sq-note { font-size: 0.69rem; color: #7a5a4a; font-weight: 300; line-height: 1.45; }
+
+/* ── PRACTICALITIES ── */
+.practical {
+  background: var(--dusk);
+  padding: 72px clamp(24px,6vw,80px);
+  margin-top: 72px;
+}
+.practical-inner { max-width: 980px; margin: 0 auto; }
+.practical h2 {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: clamp(2rem,4vw,2.8rem);
+  font-weight: 300; color: var(--cream);
+  margin-bottom: 48px; line-height: 1.1;
+}
+.practical-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px,1fr));
+  gap: 32px;
+}
+.pcard { border-left: 1px solid rgba(201,168,92,0.3); padding-left: 20px; }
+.pcard-title {
+  font-size: 0.67rem; font-weight: 600;
+  letter-spacing: 0.18em; text-transform: uppercase;
+  color: var(--gold); margin-bottom: 10px;
+}
+.pcard p { font-size: 0.86rem; line-height: 1.75; color: rgba(245,237,224,0.62); font-weight: 300; }
+
+/* ── FOOTER ── */
+footer { background: var(--ink); padding: 36px; text-align: center; }
+.footer-wm {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 1.35rem; font-weight: 300;
+  color: rgba(245,237,224,0.3); letter-spacing: 0.1em; margin-bottom: 6px;
+}
+.footer-sub { font-size: 0.65rem; letter-spacing: 0.14em; text-transform: uppercase; color: rgba(245,237,224,0.15); }
+
+/* ── LEAFLET ── */
+.leaflet-tooltip {
+  background: #2a1f3d !important;
+  border: 1px solid rgba(201,168,92,0.3) !important;
+  box-shadow: none !important;
+  border-radius: 2px !important;
+  padding: 0 !important;
+}
+.leaflet-tooltip::before { display: none !important; }
+
+@media (max-width: 560px) {
+  .sidequest { width: 100%; }
+  .hero-meta { gap: 20px; }
+}
+</style>
+</head>
+<body>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-bg"></div>
+  <div class="hero-overlay"></div>
+  <div class="hero-content">
+    <div class="route-badge">Roamer Route Guide</div>
+    <h1>The<br>Eastern<br><em>Arc</em></h1>
+    <div class="hero-meta">
+      <div class="hero-stat"><span class="num">5,600</span><span class="lbl">Miles, Bangkok to Fuji</span></div>
+      <div class="hero-stat"><span class="num">6</span><span class="lbl">Iconic Stops</span></div>
+      <div class="hero-stat"><span class="num">3–5</span><span class="lbl">Weeks Recommended</span></div>
+      <div class="hero-stat"><span class="num">5</span><span class="lbl">Countries</span></div>
+    </div>
+  </div>
+  <div class="scroll-cue"><div class="drip"></div>Scroll</div>
+</section>
+
+<!-- INTRO -->
+<section class="intro">
+  <p>From the golden spires of Bangkok to the snow cone of Fuji, this is Asia at its most cinematic — <strong>ancient temples, limestone karsts, and neon skylines</strong> strung together across five countries and three thousand years of continuous civilization. The arc bends northeast. Follow it.</p>
+</section>
+
+<!-- MAP -->
+<section class="map-section">
+  <div class="eyebrow">The Route</div>
+  <div id="overview-map"></div>
+</section>
+
+<!-- STOPS HEADING -->
+<div class="stops-heading">
+  <h2>Six stops.<br>One arc across Asia.</h2>
+</div>
+
+
+<!-- ══ STOP 1 ══ -->
+<article class="stop-card">
+  <div class="stop-photo">
+    <img src="https://images.unsplash.com/photo-1613672803979-a6edfc5a179b?q=80&w=1770&auto=format&fit=crop" alt="Bangkok, Thailand" loading="lazy">
+    <div class="stop-photo-overlay"></div>
+    <div class="stop-ghost-num">01</div>
+    <div class="stop-photo-tag">Stop 01 · The Starting Gun</div>
+  </div>
+  <div class="stop-body">
+    <h3>Bangkok, Thailand</h3>
+    <p class="tagline">A city that runs at two speeds simultaneously: the monks at dawn and the street food at midnight, both absolutely correct.</p>
+    <p class="desc">Bangkok is the right place to begin because it calibrates your senses for everything that follows. The heat, the smell of lemongrass and exhaust, the scale of the Chao Phraya river, the gold leaf of Wat Phra Kaew catching the morning light — it's overwhelming in the best possible way. Spend three days minimum. Take a longtail boat through the klongs. Eat pad kra pao at a plastic table on a pavement and understand that this is one of the world's great food cities. The rooftop bars exist; you don't have to apologize for going to them.</p>
+    <div class="fact-chips">
+      <span class="chip gold">Wat Phra Kaew: built 1782</span>
+      <span class="chip">Population: 11 million metro</span>
+      <span class="chip">50+ Michelin-starred restaurants</span>
+      <span class="chip">Best months: Nov–Feb</span>
+      <span class="chip">Don't miss: Chatuchak Weekend Market</span>
+    </div>
+  </div>
+</article>
+
+<!-- CONNECTOR 1→2 -->
+<div class="connector"><div class="connector-inner">
+  <div class="connector-journey">
+    <span class="journey-icon">✈️</span>
+    <div class="journey-main">
+      <div class="journey-time">Fly to Siem Reap</div>
+      <div class="journey-detail">~1 hr 15 min · Bangkok (BKK) → Siem Reap (REP)</div>
+      <div class="journey-note">Short hop northeast into Cambodia. Alternatively, the overland bus via Poipet takes around 8 hours and crosses one of Southeast Asia's more chaotic border crossings — a genuine experience, if that's what you're after.</div>
+    </div>
+  </div>
+  <div class="sq-label">Worth the Detour</div>
+  <div class="sidequests">
+    <div class="sidequest"><span class="sq-icon">🏝️</span><div><div class="sq-name">Koh Samui or Koh Lanta</div><div class="sq-note">If you have a spare few days before leaving Thailand, the Gulf islands are exactly what they look like in the photographs.</div></div></div>
+    <div class="sidequest"><span class="sq-icon">🏛️</span><div><div class="sq-name">Ayutthaya, Thailand</div><div class="sq-note">The former Siamese capital, an hour north of Bangkok by train. Headless Buddhas in the roots of banyan trees. Haunting and magnificent.</div></div></div>
+    <div class="sidequest"><span class="sq-icon">🌿</span><div><div class="sq-name">Chiang Mai, Thailand</div><div class="sq-note">The cooler, slower north. Elephant sanctuaries, cooking classes, and a Sunday walking street market that takes over the old city.</div></div></div>
+  </div>
+</div></div>
+
+<!-- ══ STOP 2 ══ -->
+<article class="stop-card">
+  <div class="stop-photo">
+    <img src="https://images.unsplash.com/photo-1566706546199-a93ba33ce9f7?q=80&w=2232&auto=format&fit=crop" alt="Angkor Wat, Cambodia" loading="lazy">
+    <div class="stop-photo-overlay"></div>
+    <div class="stop-ghost-num">02</div>
+    <div class="stop-photo-tag">Stop 02 · The Temple Complex</div>
+  </div>
+  <div class="stop-body">
+    <h3>Angkor Wat, Cambodia</h3>
+    <p class="tagline">The largest religious monument ever built. The jungle spent four centuries trying to take it back and very nearly succeeded.</p>
+    <p class="desc">Angkor Wat is not a temple — it is a city of temples, the spiritual and administrative capital of the Khmer Empire, constructed across 400 square kilometres of jungle between the 9th and 15th centuries. The main complex is the largest religious structure on earth, its five towers representing the peaks of Mount Meru in Hindu cosmology. Arrive before dawn for the reflection in the moat. Then spend two full days exploring the wider complex: Ta Prohm, where the tree roots have colonised the stone; the Bayon, with its 200 enormous stone faces; Banteay Srei, with sandstone carvings so intricate they look impossible. Buy a three-day pass. You will use it.</p>
+    <div class="fact-chips">
+      <span class="chip gold">Built: early 12th century</span>
+      <span class="chip">Area: 400 sq km of monuments</span>
+      <span class="chip">UNESCO World Heritage since 1992</span>
+      <span class="chip">Best light: dawn at the main moat</span>
+      <span class="chip">Don't miss: Bayon at midday</span>
+    </div>
+  </div>
+</article>
+
+<!-- CONNECTOR 2→3 -->
+<div class="connector"><div class="connector-inner">
+  <div class="connector-journey">
+    <span class="journey-icon">✈️</span>
+    <div class="journey-main">
+      <div class="journey-time">Fly to Hanoi via Ho Chi Minh City or direct</div>
+      <div class="journey-detail">~2–3 hrs total · Siem Reap (REP) → Hanoi (HAN)</div>
+      <div class="journey-note">Direct flights exist on several carriers; a connection via Ho Chi Minh City adds time but gives you the option of a night in Saigon — worth it if your schedule can absorb it. From Hanoi, Halong Bay is a 3.5-hour drive east.</div>
+    </div>
+  </div>
+  <div class="sq-label">Worth the Detour</div>
+  <div class="sidequests">
+    <div class="sidequest"><span class="sq-icon">🍜</span><div><div class="sq-name">Ho Chi Minh City, Vietnam</div><div class="sq-note">The chaotic, kinetic south. Eat bánh mì for breakfast, visit the War Remnants Museum in the afternoon, and don't underestimate the motorbike traffic.</div></div></div>
+    <div class="sidequest"><span class="sq-icon">🌊</span><div><div class="sq-name">Phong Nha Caves, Vietnam</div><div class="sq-note">Home to the world's largest cave system. Son Doong requires a serious expedition permit; Phong Nha itself is accessible and extraordinary.</div></div></div>
+    <div class="sidequest"><span class="sq-icon">🏮</span><div><div class="sq-name">Hội An, Vietnam</div><div class="sq-note">The lantern city. A UNESCO old town of merchant houses and tailors who can make you a suit overnight. Allow at least two nights.</div></div></div>
+  </div>
+</div></div>
+
+<!-- ══ STOP 3 ══ -->
+<article class="stop-card">
+  <div class="stop-photo">
+    <img src="https://images.unsplash.com/photo-1643029891412-92f9a81a8c16?q=80&w=2972&auto=format&fit=crop" alt="Halong Bay, Vietnam" loading="lazy">
+    <div class="stop-photo-overlay"></div>
+    <div class="stop-ghost-num">03</div>
+    <div class="stop-photo-tag">Stop 03 · The Karsts</div>
+  </div>
+  <div class="stop-body">
+    <h3>Halong Bay, Vietnam</h3>
+    <p class="tagline">1,600 limestone islands rising from green water, most of them uninhabited. The mist in the morning makes the whole thing look like a painting of itself.</p>
+    <p class="desc">Halong Bay is 1,553 square kilometres of karst seascape in the Gulf of Tonkin — a UNESCO site containing over 1,600 islands and islets, most formed from limestone pillars pushed up from the sea floor over 500 million years of geological patience. The only sensible way to see it is by overnight junk boat: two nights is better than one, and the further from the main harbour you get, the more the crowds thin. Kayak into sea caves at low tide. Watch the squid fishing boats light up at dusk. Eat whatever the boat's cook makes. Halong Bay is frequently cited as one of the world's great natural wonders, and for once the citation is entirely justified.</p>
+    <div class="fact-chips">
+      <span class="chip gold">1,600+ limestone islands</span>
+      <span class="chip">UNESCO World Heritage since 1994</span>
+      <span class="chip">Best accessed: overnight cruise from Hanoi</span>
+      <span class="chip">Best months: Oct–Apr</span>
+      <span class="chip">Avoid: July–Aug (typhoon season)</span>
+    </div>
+  </div>
+</article>
+
+<!-- CONNECTOR 3→4 -->
+<div class="connector"><div class="connector-inner">
+  <div class="connector-journey">
+    <span class="journey-icon">✈️</span>
+    <div class="journey-main">
+      <div class="journey-time">Fly to Hong Kong</div>
+      <div class="journey-detail">~2 hrs · Hanoi (HAN) → Hong Kong (HKG)</div>
+      <div class="journey-note">A clean, frequent route with multiple carriers. Land at Chek Lap Kok and take the Airport Express — 24 minutes to Hong Kong station, one of the world's more satisfying airport-to-city transfers.</div>
+    </div>
+  </div>
+  <div class="sq-label">Worth the Detour</div>
+  <div class="sidequests">
+    <div class="sidequest"><span class="sq-icon">🏞️</span><div><div class="sq-name">Sa Pa, Vietnam</div><div class="sq-note">Rice terraces cascading down Hoàng Liên Son mountain range near the Chinese border. Overnight train from Hanoi, then a bus up into the clouds.</div></div></div>
+    <div class="sidequest"><span class="sq-icon">🎋</span><div><div class="sq-name">Guilin & Li River, China</div><div class="sq-note">The karst landscape that inspired a thousand Chinese paintings. A short detour before Hong Kong, if you have a Chinese visa in hand.</div></div></div>
+    <div class="sidequest"><span class="sq-icon">🛕</span><div><div class="sq-name">Macau</div><div class="sq-note">45 minutes by ferry from Hong Kong. The Portuguese colonial architecture alongside the casino towers is a genuinely strange and beautiful combination.</div></div></div>
+  </div>
+</div></div>
+
+<!-- ══ STOP 4 ══ -->
+<article class="stop-card">
+  <div class="stop-photo">
+    <img src="https://images.unsplash.com/photo-1619187269972-267d2b78a423?q=80&w=1674&auto=format&fit=crop" alt="Hong Kong" loading="lazy">
+    <div class="stop-photo-overlay"></div>
+    <div class="stop-ghost-num">04</div>
+    <div class="stop-photo-tag">Stop 04 · The Skyline</div>
+  </div>
+  <div class="stop-body">
+    <h3>Hong Kong</h3>
+    <p class="tagline">A city built vertically out of sheer necessity, where the mountains meet the harbour and both seem entirely unfazed by the density of everything in between.</p>
+    <p class="desc">Hong Kong operates at an intensity that makes other cities feel underachieving. Seven million people on 1,100 square kilometres of largely mountainous terrain, served by one of the world's most efficient transit systems and a restaurant culture that runs from Michelin-starred Cantonese to a bowl of wonton noodles eaten standing at a dai pai dong at midnight. Take the Peak Tram to Victoria Peak for the harbour view. Walk through the wet markets of Sham Shui Po. Take the Star Ferry at dusk. Hike the Dragon's Back trail if the pollution allows. Two days is the minimum; four lets you breathe.</p>
+    <div class="fact-chips">
+      <span class="chip gold">Density: 6,700 people per sq km</span>
+      <span class="chip">MTR: 99.9% on-time rate</span>
+      <span class="chip">Most Michelin stars per capita globally</span>
+      <span class="chip">Victoria Peak: 552 m / 1,811 ft</span>
+      <span class="chip">Don't miss: Star Ferry at dusk</span>
+    </div>
+  </div>
+</article>
+
+<!-- CONNECTOR 4→5 -->
+<div class="connector"><div class="connector-inner">
+  <div class="connector-journey">
+    <span class="journey-icon">✈️</span>
+    <div class="journey-main">
+      <div class="journey-time">Fly to Beijing</div>
+      <div class="journey-detail">~3 hrs · Hong Kong (HKG) → Beijing (PEK)</div>
+      <div class="journey-note">Frequent direct flights on multiple carriers. Note that a Chinese visa is required for most nationalities and must be arranged well in advance — don't leave this until the week before. The high-speed rail from Hong Kong to Guangzhou and onward to Beijing also exists, covering the distance in around 9 hours.</div>
+    </div>
+  </div>
+  <div class="sq-label">Worth the Detour</div>
+  <div class="sidequests">
+    <div class="sidequest"><span class="sq-icon">🏮</span><div><div class="sq-name">Shanghai</div><div class="sq-note">The Bund at night, the French Concession by day. A stopover between Hong Kong and Beijing that deserves two nights of its own.</div></div></div>
+    <div class="sidequest"><span class="sq-icon">🗿</span><div><div class="sq-name">Xi'an, China</div><div class="sq-note">The Terracotta Army alone justifies the detour. 8,000 life-size warriors buried with the first Qin emperor in 210 BC, discovered by farmers in 1974.</div></div></div>
+    <div class="sidequest"><span class="sq-icon">🌸</span><div><div class="sq-name">Zhangjiajie, China</div><div class="sq-note">The floating sandstone pillars that inspired the mountains in Avatar. Surreal from any angle.</div></div></div>
+  </div>
+</div></div>
+
+<!-- ══ STOP 5 ══ -->
+<article class="stop-card">
+  <div class="stop-photo">
+    <img src="https://images.unsplash.com/photo-1508804185872-d7badad00f7d?q=80&w=1770&auto=format&fit=crop" alt="Beijing, China" loading="lazy">
+    <div class="stop-photo-overlay"></div>
+    <div class="stop-ghost-num">05</div>
+    <div class="stop-photo-tag">Stop 05 · The Imperial Capital</div>
+  </div>
+  <div class="stop-body">
+    <h3>Beijing, China</h3>
+    <p class="tagline">A city that has been the centre of the known world, more or less, for eight hundred years. It carries this casually.</p>
+    <p class="desc">Beijing is vast, layered, and built to a scale intended to make its visitors feel appropriately small. The Forbidden City — 980 buildings across 180 acres, home to 24 emperors — is the obvious starting point. Tiananmen Square, the Temple of Heaven, the Summer Palace: each deserves half a day. The Great Wall is not in Beijing but an hour north of it, and you should go regardless; Mutianyu is the best-preserved section and has far fewer crowds than Badaling. Duck into the hutong neighbourhoods around Nanluogu Xiang for a slower pace. Eat Peking duck at a restaurant that has been making it for a century. Beijing rewards the unhurried visitor.</p>
+    <div class="fact-chips">
+      <span class="chip gold">Forbidden City: 180 acres, 980 buildings</span>
+      <span class="chip">Capital since 1421</span>
+      <span class="chip">Great Wall: ~1 hr north at Mutianyu</span>
+      <span class="chip">Best months: Apr–May, Sep–Oct</span>
+      <span class="chip">Visa required: arrange well in advance</span>
+    </div>
+  </div>
+</article>
+
+<!-- CONNECTOR 5→6 -->
+<div class="connector"><div class="connector-inner">
+  <div class="connector-journey">
+    <span class="journey-icon">✈️</span>
+    <div class="journey-main">
+      <div class="journey-time">Fly to Tokyo, then train to Fujiyoshida</div>
+      <div class="journey-detail">~3.5 hrs flying · Beijing (PEK) → Tokyo (NRT) · then ~2 hrs by rail to Mt Fuji area</div>
+      <div class="journey-note">Land at Narita or Haneda, take the Shinkansen or limited express to Otsuki, then the Fujikyu Railway to Fujiyoshida. The whole transfer from Tokyo takes about two hours and the train windows do most of the work — on a clear day Fuji appears long before you arrive.</div>
+    </div>
+  </div>
+  <div class="sq-label">Worth the Detour</div>
+  <div class="sidequests">
+    <div class="sidequest"><span class="sq-icon">🗼</span><div><div class="sq-name">Tokyo</div><div class="sq-note">Give Tokyo more than a transit night if you can — it is one of the world's great cities and rewards extended stays. Shibuya, Yanaka, Tsukiji: three entirely different cities within the same city.</div></div></div>
+    <div class="sidequest"><span class="sq-icon">⛩️</span><div><div class="sq-name">Kyoto, Japan</div><div class="sq-note">The old capital, 2.5 hours by Shinkansen from Tokyo. Fushimi Inari's thousand torii gates at dawn, before the crowds arrive, is one of Asia's defining experiences.</div></div></div>
+    <div class="sidequest"><span class="sq-icon">🦌</span><div><div class="sq-name">Nara, Japan</div><div class="sq-note">45 minutes from Kyoto. Free-roaming sacred deer, a giant bronze Buddha, and a pace that makes Kyoto feel hurried.</div></div></div>
+  </div>
+</div></div>
+
+<!-- ══ STOP 6 ══ -->
+<article class="stop-card">
+  <div class="stop-photo">
+    <img src="https://images.unsplash.com/photo-1526481280693-3bfa7568e0f3?q=80&w=1771&auto=format&fit=crop" alt="Mt Fuji, Japan" loading="lazy">
+    <div class="stop-photo-overlay"></div>
+    <div class="stop-ghost-num">06</div>
+    <div class="stop-photo-tag">Stop 06 · The Summit</div>
+  </div>
+  <div class="stop-body">
+    <h3>Mt Fuji, Japan</h3>
+    <p class="tagline">Japan's highest peak and most recognizable symbol — a near-perfect stratovolcano that appears in the corner of the view from half the country.</p>
+    <p class="desc">Fuji is 3,776 metres of dormant volcano, last erupted in 1707, and visible on clear days from Tokyo, 100 kilometres away. The climbing season runs from early July to mid-September; the most popular trail, the Yoshida, starts at 5th Station at 2,300 metres and takes 5–7 hours to summit. Most people climb overnight to watch the sunrise from the crater rim — goraiko, the Japanese call it, the arrival of light. Outside climbing season, the Fuji Five Lakes region at the mountain's northern base gives you the classic reflection shot in Lake Kawaguchiko. Either way, the arc ends here: at the top of Japan, looking back across everything you covered to get here.</p>
+    <div class="fact-chips">
+      <span class="chip gold">Height: 3,776 m / 12,389 ft</span>
+      <span class="chip">Climbing season: Jul–mid Sep</span>
+      <span class="chip">Last eruption: 1707</span>
+      <span class="chip">Summit climb: 5–7 hrs via Yoshida Trail</span>
+      <span class="chip">Best view: Lake Kawaguchiko at dawn</span>
+    </div>
+  </div>
+</article>
+
+
+<!-- PRACTICALITIES -->
+<section class="practical">
+  <div class="practical-inner">
+    <h2>Before you go.</h2>
+    <div class="practical-grid">
+      <div class="pcard">
+        <div class="pcard-title">Visas</div>
+        <p>China requires a visa for most nationalities — apply at least four weeks in advance and don't underestimate the paperwork. Cambodia and Vietnam issue visas on arrival or via e-visa. Thailand is visa-free for most western passports up to 30 days. Japan is visa-free for many nationalities. Check your specific passport against each country well before departure.</p>
+      </div>
+      <div class="pcard">
+        <div class="pcard-title">The Great Firewall</div>
+        <p>Google, Instagram, WhatsApp, and most western apps do not function in mainland China without a VPN. Download and test your VPN before you arrive in China — they are significantly harder to install once you're inside. Hong Kong currently operates under different rules but the situation evolves.</p>
+      </div>
+      <div class="pcard">
+        <div class="pcard-title">Best Season</div>
+        <p>November to February is the sweet spot for Bangkok, Angkor, and Halong Bay — cool and dry. Japan and Beijing are best in April (cherry blossom) or September to October. Summer means heat and typhoon risk across most of the route; July and August are manageable but not ideal. The Fuji climbing season runs July to mid-September regardless.</p>
+      </div>
+      <div class="pcard">
+        <div class="pcard-title">Getting Around</div>
+        <p>Flights connect every stop efficiently and cheaply by western standards. Within cities, public transport is excellent — Bangkok's BTS skytrain, Hong Kong's MTR, Tokyo's rail network, and Beijing's subway are all world-class. In Vietnam and Cambodia, tuk-tuks and Grab (the regional Uber) handle the rest. Rent nothing; transit does the job.</p>
+      </div>
+      <div class="pcard">
+        <div class="pcard-title">Money</div>
+        <p>Cash is still king in Cambodia and Vietnam. China has moved aggressively to digital payments (WeChat Pay, Alipay) and can be tricky for foreign cards — carry yuan for smaller transactions. Thailand, Hong Kong, and Japan all accept cards widely, though Japan remains more cash-dependent than you might expect outside major cities.</p>
+      </div>
+      <div class="pcard">
+        <div class="pcard-title">How Long You Really Need</div>
+        <p>Three weeks is the minimum to avoid feeling like you're sprinting. Five is comfortable. Angkor alone deserves three days. Tokyo will steal time you budgeted for everything else. The Fuji climbing season is fixed — if summiting is on the list, build the entire trip around the July–September window and work backwards.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="footer-wm">Roamer</div>
+  <div class="footer-sub">Daily Route Guides</div>
+</footer>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+
+  const stops = [
+    { name: "Bangkok, Thailand",              lat: 13.752494,  lng: 100.493509 },
+    { name: "Angkor Wat, Cambodia",           lat: 13.423545,  lng: 103.857529 },
+    { name: "Halong Bay, Vietnam",            lat: 20.908438,  lng: 107.068278 },
+    { name: "Hong Kong",                      lat: 22.349215,  lng: 114.185798 },
+    { name: "Beijing, China",                 lat: 39.905714,  lng: 116.391297 },
+    { name: "Mt Fuji, Japan",                 lat: 35.483549,  lng: 138.795446 },
+  ];
+
+  const map = L.map('overview-map', {
+    zoomControl: true,
+    scrollWheelZoom: false,
+    attributionControl: false,
+  });
+
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    maxZoom: 14
+  }).addTo(map);
+
+  const latlngs = stops.map(s => [s.lat, s.lng]);
+  const poly = L.polyline(latlngs, {
+    color: '#c9a85c', weight: 2, opacity: 0.7, dashArray: '6,6'
+  }).addTo(map);
+
+  const goldIcon = L.divIcon({
+    className: '',
+    html: `<div style="width:9px;height:9px;background:#c9a85c;border-radius:50%;border:2px solid rgba(245,237,224,.75);box-shadow:0 0 7px rgba(201,168,92,.5)"></div>`,
+    iconSize: [9,9], iconAnchor: [4.5,4.5]
+  });
+
+  stops.forEach((s, i) => {
+    L.marker([s.lat, s.lng], { icon: goldIcon }).addTo(map)
+     .bindTooltip(
+       `<span style="font-family:Jost,sans-serif;font-size:12px;color:#f5ede0;padding:4px 8px;display:block">${i+1}. ${s.name}</span>`,
+       { direction: 'right' }
+     );
+  });
+
+  map.fitBounds(poly.getBounds(), { padding: [28,28] });
+
+  const cards = document.querySelectorAll('.stop-card');
+  const io = new IntersectionObserver(entries => {
+    entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible'); });
+  }, { threshold: 0.08 });
+  cards.forEach(c => io.observe(c));
+});
+</script>
+</body>
+</html>
