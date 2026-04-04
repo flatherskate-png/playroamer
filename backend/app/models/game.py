@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import List
+from typing import List, Optional
 
 
 class Location(BaseModel):
@@ -20,6 +20,7 @@ class Route(BaseModel):
     region: str = ""
     pack: str = ""
     blurb: str = ""
+    explore_url: Optional[str] = None   # ← added
     stops: List[Location]
     decoys: List[Decoy]
 
@@ -51,6 +52,7 @@ class RouteHidden(BaseModel):
     decoy_count: int
     slots: List[SlotHidden]
     photos: List[LocationHidden]
+    explore_url: Optional[str] = None   # ← added
 
 
 class RouteRevealed(BaseModel):

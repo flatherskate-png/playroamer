@@ -1475,7 +1475,7 @@ body {
 /* Thumbnail strip */
 /* Mobile in-tray submit button */
 #mt-submit-slot {
-  padding: 6px 10px 2px;
+  padding: 8px 10px 8px;
 }
 .mt-submit-btn {
   display: block;
@@ -1683,4 +1683,60 @@ body {
   .play-col-map #route-canvas {
     aspect-ratio: 3 / 2 !important;
   }
+}
+
+
+/* ═══════════════════════════════════════════════════════
+   JOURNEY PAGE INTEGRATION
+   ═══════════════════════════════════════════════════════ */
+
+/* "Explore this Route" — distinct from the other two CTA buttons */
+.drc-cta-explore {
+  color: var(--cyan);
+  border-color: rgba(125, 211, 252, 0.35);
+  background: rgba(125, 211, 252, 0.06);
+}
+.drc-cta-explore:hover {
+  background: rgba(125, 211, 252, 0.14);
+  border-color: rgba(125, 211, 252, 0.6);
+}
+
+/* Once tapped on mobile, arrow bounces downward */
+.drc-cta-explore.jrn-open::after {
+  content: ' ↓';
+  animation: jrn-bounce 1.2s ease-in-out infinite;
+}
+@keyframes jrn-bounce {
+  0%, 100% { transform: translateY(0); }
+  50%       { transform: translateY(3px); }
+}
+
+/* ── Below-fold container ── */
+.drc-below-fold {
+  display: none;
+  width: 100%;
+}
+
+.drc-below-fold::before {
+  content: '';
+  display: block;
+  height: 3px;
+  background: linear-gradient(
+    to right,
+    transparent,
+    rgba(125, 211, 252, 0.4) 30%,
+    rgba(192, 132, 252, 0.3) 70%,
+    transparent
+  );
+}
+
+#drc-itinerary-frame {
+  width: 100%;
+  height: 100vh;
+  border: none;
+  display: block;
+}
+
+@media (min-width: 769px) {
+  .drc-below-fold { display: none !important; }
 }

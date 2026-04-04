@@ -1055,6 +1055,16 @@ function render() {
       if (typeof window.openHowToPlay === 'function') window.openHowToPlay();
     });
 
+    // Pips sub-line — only during active game, not on completion screen
+    document.getElementById('nav-sub-line')?.remove();
+    if (!revealed) {
+      const subLine = document.createElement('div');
+      subLine.id = 'nav-sub-line';
+      subLine.className = 'nav-sub-line';
+      subLine.innerHTML = `<span>Guess ${guessNum} of ${MAX_GUESSES}</span><div class="guesses-pip">${pipsHTML}</div>`;
+      navEl?.after(subLine);
+    }
+
     if (navEl) navEl.classList.add('nav-play-mode');
   } else if (screen === "home") {
     navRight.innerHTML = `<button class="btn-ghost" id="nav-core">Grand Adventures</button>`;

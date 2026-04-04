@@ -47,6 +47,7 @@ def get_public_route(route: Route) -> RouteHidden:
         decoy_count=len(route.decoys),
         slots=[SlotHidden(lat=s.lat, lng=s.lng) for s in route.stops],
         photos=all_photos,
+        explore_url=route.explore_url,   # ← added
     )
 
 

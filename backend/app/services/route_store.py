@@ -10,6 +10,7 @@ Expected CSV columns:
     lng         - float
     photo_url   - string (non-empty URL)
     is_decoy    - "true" or "false" (case-insensitive)
+    explore_url - string (optional) — relative or absolute URL to the journey page
 
 Route IDs are auto-incremented in the order routes first appear in the file:
 route-001, route-002, ...
@@ -63,7 +64,7 @@ def _load_routes(csv_path: Path) -> list[Route]:
     if not csv_path.exists():
         raise FileNotFoundError(f"Routes CSV not found: {csv_path}")
 
-    # { route_name -> { "stops": [...], "decoys": [...] } }
+    # { route_name -> { "stops": [...], "decoys": [...], ... } }
     route_buckets: dict[str, dict] = {}
     route_order:   list[str]       = []  # preserves first-seen order for ID assignment
 
@@ -83,21 +84,28 @@ def _load_routes(csv_path: Path) -> list[Route]:
             lng        = _parse_float(row["lng"],        row_num, "lng")
             stop_order = _parse_int  (row["stop_order"], row_num, "stop_order")
 
-            region = row.get("region", "").strip()
-            pack   = row.get("pack", "").strip()
-            blurb  = row.get("blurb", "").strip()
+            region      = row.get("region", "").strip()
+            pack        = row.get("pack", "").strip()
+            blurb       = row.get("blurb", "").strip()
+            explore_url = row.get("explore_url", "").strip() or None  # ← added
 
             if route_name not in route_buckets:
-                route_buckets[route_name] = {"stops": [], "decoys": [], "region": "", "pack": "", "blurb": ""}
+                route_buckets[route_name] = {
+                    "stops": [], "decoys": [],
+                    "region": "", "pack": "", "blurb": "",
+                    "explore_url": None,   # ← added
+                }
                 route_order.append(route_name)
 
-            # Use first non-empty value seen for region/pack/blurb
+            # Use first non-empty value seen for these per-route fields
             if region and not route_buckets[route_name]["region"]:
                 route_buckets[route_name]["region"] = region
             if pack and not route_buckets[route_name]["pack"]:
                 route_buckets[route_name]["pack"] = pack
             if blurb and not route_buckets[route_name]["blurb"]:
                 route_buckets[route_name]["blurb"] = blurb
+            if explore_url and not route_buckets[route_name]["explore_url"]:  # ← added
+                route_buckets[route_name]["explore_url"] = explore_url
 
             if is_decoy:
                 route_buckets[route_name]["decoys"].append(
@@ -121,6 +129,7 @@ def _load_routes(csv_path: Path) -> list[Route]:
             region=bucket["region"],
             pack=bucket["pack"],
             blurb=bucket["blurb"],
+            explore_url=bucket["explore_url"],   # ← added
             stops=ordered_stops,
             decoys=bucket["decoys"],
         ))
