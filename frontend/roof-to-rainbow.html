@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Roof to Rainbow — Roamer Route Guide</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300;1,400&family=Jost:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --cream: #faf7f0; --ink: #14100a; --dusk: #1e2d1a;
+  --savanna: #8b6914; --gold: #c4922a; --fog: #9aaa88;
+  --rust: #8b3a0f; --earth: #5c3d1a;
+}
+html { scroll-behavior: smooth; }
+body { background: var(--cream); color: var(--ink); font-family: 'Jost', sans-serif; font-weight: 300; overflow-x: hidden; }
+
+.hero { position: relative; height: 100vh; min-height: 600px; display: flex; flex-direction: column; justify-content: flex-end; overflow: hidden; }
+.hero-bg { position: absolute; inset: 0; background: url('https://images.unsplash.com/photo-1519659528534-7fd733a832a0?q=80&w=1626&auto=format&fit=crop') center 45% / cover no-repeat; animation: slowZoom 20s ease-in-out infinite alternate; }
+@keyframes slowZoom { from { transform: scale(1.0); } to { transform: scale(1.06); } }
+.hero-overlay { position: absolute; inset: 0; background: linear-gradient(to bottom, rgba(20,16,10,0.05) 0%, rgba(20,16,10,0.1) 40%, rgba(20,16,10,0.78) 72%, rgba(20,16,10,0.94) 100%); }
+.hero-content { position: relative; z-index: 2; padding: clamp(36px,5vw,72px) clamp(28px,6vw,80px); max-width: 820px; }
+.route-badge { display: inline-flex; align-items: center; gap: 10px; font-size: 0.68rem; font-weight: 500; letter-spacing: 0.2em; text-transform: uppercase; color: var(--gold); margin-bottom: 18px; }
+.route-badge::before { content: ''; display: block; width: 22px; height: 1px; background: var(--gold); }
+.hero h1 { font-family: 'Cormorant Garamond', serif; font-size: clamp(3.2rem, 8vw, 7rem); font-weight: 300; line-height: 0.9; color: var(--cream); letter-spacing: -0.01em; margin-bottom: 28px; }
+.hero h1 em { font-style: italic; color: rgba(250,247,240,0.52); }
+.hero-meta { display: flex; gap: 32px; flex-wrap: wrap; }
+.hero-stat { display: flex; flex-direction: column; gap: 3px; }
+.hero-stat .num { font-family: 'Cormorant Garamond', serif; font-size: 1.85rem; font-weight: 300; color: var(--cream); line-height: 1; }
+.hero-stat .lbl { font-size: 0.65rem; font-weight: 500; letter-spacing: 0.15em; text-transform: uppercase; color: var(--fog); }
+.scroll-cue { position: absolute; bottom: 32px; right: clamp(28px,6vw,80px); z-index: 2; display: flex; flex-direction: column; align-items: center; gap: 8px; color: rgba(250,247,240,0.38); font-size: 0.62rem; letter-spacing: 0.15em; text-transform: uppercase; animation: fadeIn 2s 1.2s both; }
+.scroll-cue .drip { width: 1px; height: 44px; background: linear-gradient(to bottom, transparent, rgba(250,247,240,0.38)); animation: drip 2.4s 1.4s ease-in-out infinite; }
+@keyframes drip { 0%,100% { transform: scaleY(1); opacity: 0.4; } 55% { transform: scaleY(1.35); opacity: 0.9; } }
+@keyframes fadeIn { from { opacity:0; } to { opacity:1; } }
+
+.intro { max-width: 740px; margin: 80px auto 0; padding: 0 clamp(24px,5vw,60px); }
+.intro p { font-family: 'Cormorant Garamond', serif; font-size: clamp(1.3rem, 2.6vw, 1.75rem); font-weight: 300; line-height: 1.68; color: #2a1e0a; }
+.intro p strong { font-weight: 400; color: var(--rust); }
+
+.map-section { margin: 64px auto; max-width: 980px; padding: 0 clamp(24px,5vw,60px); }
+.eyebrow { font-size: 0.66rem; font-weight: 500; letter-spacing: 0.2em; text-transform: uppercase; color: var(--fog); margin-bottom: 14px; display: flex; align-items: center; gap: 12px; }
+.eyebrow::after { content: ''; flex: 1; height: 1px; background: linear-gradient(to right, rgba(154,170,136,0.35), transparent); }
+#overview-map { width: 100%; height: 380px; border-radius: 3px; overflow: hidden; border: 1px solid rgba(30,45,26,0.1); }
+
+.stops-heading { max-width: 980px; margin: 0 auto 52px; padding: 0 clamp(24px,5vw,60px); }
+.stops-heading h2 { font-family: 'Cormorant Garamond', serif; font-size: clamp(2rem,4vw,2.9rem); font-weight: 300; color: var(--dusk); line-height: 1.1; }
+
+.stop-card { max-width: 980px; margin: 0 auto; padding: 0 clamp(24px,5vw,60px); opacity: 0; transform: translateY(20px); transition: opacity 0.65s ease, transform 0.65s ease; }
+.stop-card.visible { opacity: 1; transform: none; }
+.stop-photo { position: relative; width: 100%; height: clamp(240px, 40vw, 460px); overflow: hidden; border-radius: 3px 3px 0 0; }
+.stop-photo img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform 0.7s ease; }
+.stop-card:hover .stop-photo img { transform: scale(1.03); }
+.stop-photo-overlay { position: absolute; inset: 0; background: linear-gradient(to bottom, rgba(20,16,10,0) 45%, rgba(20,16,10,0.55) 100%); pointer-events: none; }
+.stop-ghost-num { position: absolute; top: 14px; right: 20px; font-family: 'Cormorant Garamond', serif; font-size: clamp(3.2rem,7vw,5.5rem); font-weight: 300; color: rgba(250,247,240,0.48); line-height: 1; pointer-events: none; z-index: 2; letter-spacing: -0.02em; }
+.stop-photo-tag { position: absolute; bottom: 16px; left: 20px; font-size: 0.63rem; font-weight: 600; letter-spacing: 0.2em; text-transform: uppercase; color: var(--gold); z-index: 2; }
+.stop-body { background: var(--dusk); padding: clamp(26px,3.5vw,44px) clamp(22px,4vw,48px); border-radius: 0 0 3px 3px; }
+.stop-body h3 { font-family: 'Cormorant Garamond', serif; font-size: clamp(1.65rem,3.2vw,2.3rem); font-weight: 300; color: var(--cream); line-height: 1.12; margin-bottom: 12px; }
+.stop-body .tagline { font-family: 'Cormorant Garamond', serif; font-style: italic; font-size: 1.03rem; color: rgba(250,247,240,0.46); line-height: 1.55; margin-bottom: 16px; }
+.stop-body p.desc { font-size: 0.87rem; line-height: 1.8; color: rgba(250,247,240,0.66); font-weight: 300; margin-bottom: 22px; max-width: 72ch; }
+.fact-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { font-size: 0.69rem; font-weight: 400; letter-spacing: 0.05em; color: var(--fog); border: 1px solid rgba(154,170,136,0.25); padding: 5px 12px; border-radius: 100px; background: rgba(154,170,136,0.06); }
+.chip.gold { color: var(--gold); border-color: rgba(196,146,42,0.3); background: rgba(196,146,42,0.07); }
+
+.connector { max-width: 980px; margin: 0 auto; padding: 0 clamp(24px,5vw,60px); }
+.connector-inner { border-left: 1px solid rgba(196,146,42,0.28); margin-left: 10px; padding: 30px 0 30px 32px; position: relative; }
+.connector-inner::before { content: ''; position: absolute; top: 30px; left: -5px; width: 9px; height: 9px; border-radius: 50%; background: var(--gold); box-shadow: 0 0 8px rgba(196,146,42,0.4); }
+.connector-inner::after { content: ''; position: absolute; bottom: 30px; left: -5px; width: 9px; height: 9px; border-radius: 50%; background: rgba(196,146,42,0.3); border: 1px solid var(--gold); }
+.connector-drive { display: flex; align-items: baseline; gap: 10px; margin-bottom: 20px; }
+.drive-time { font-family: 'Cormorant Garamond', serif; font-size: 1.3rem; font-weight: 300; color: var(--dusk); line-height: 1; }
+.drive-detail { font-size: 0.71rem; color: var(--fog); letter-spacing: 0.06em; }
+.sq-label { font-size: 0.62rem; font-weight: 600; letter-spacing: 0.2em; text-transform: uppercase; color: var(--rust); margin-bottom: 12px; }
+.sidequests { display: flex; flex-wrap: wrap; gap: 10px; }
+.sidequest { display: flex; align-items: flex-start; gap: 10px; background: #f0ece0; border: 1px solid rgba(139,105,20,0.15); border-radius: 3px; padding: 10px 14px; width: clamp(200px, 28%, 260px); }
+.sq-icon { font-size: 1rem; line-height: 1; margin-top: 1px; flex-shrink: 0; }
+.sq-name { font-size: 0.79rem; font-weight: 500; color: var(--ink); line-height: 1.25; margin-bottom: 3px; }
+.sq-note { font-size: 0.69rem; color: #5c3d1a; font-weight: 300; line-height: 1.45; }
+
+.curator-note { display: flex; align-items: flex-start; gap: 10px; background: rgba(196,146,42,0.07); border: 1px solid rgba(196,146,42,0.22); border-radius: 3px; padding: 12px 16px; margin-top: 14px; font-size: 0.75rem; color: #5c3d1a; line-height: 1.55; font-style: italic; }
+.curator-note::before { content: 'Note: '; font-style: normal; font-weight: 600; flex-shrink: 0; }
+
+/* Transport mode badge — for fly legs */
+.transport-mode { display: inline-flex; align-items: center; gap: 6px; font-size: 0.68rem; font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase; color: var(--gold); background: rgba(196,146,42,0.1); border: 1px solid rgba(196,146,42,0.25); border-radius: 100px; padding: 4px 12px; margin-bottom: 16px; }
+
+.practical { background: var(--dusk); padding: 72px clamp(24px,6vw,80px); margin-top: 72px; }
+.practical-inner { max-width: 980px; margin: 0 auto; }
+.practical h2 { font-family: 'Cormorant Garamond', serif; font-size: clamp(2rem,4vw,2.8rem); font-weight: 300; color: var(--cream); margin-bottom: 48px; line-height: 1.1; }
+.practical-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px,1fr)); gap: 32px; }
+.pcard { border-left: 1px solid rgba(196,146,42,0.3); padding-left: 20px; }
+.pcard-title { font-size: 0.67rem; font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase; color: var(--gold); margin-bottom: 10px; }
+.pcard p { font-size: 0.86rem; line-height: 1.75; color: rgba(250,247,240,0.62); font-weight: 300; }
+
+footer { background: var(--ink); padding: 36px; text-align: center; }
+.footer-wm { font-family: 'Cormorant Garamond', serif; font-size: 1.35rem; font-weight: 300; color: rgba(250,247,240,0.3); letter-spacing: 0.1em; margin-bottom: 6px; }
+.footer-sub { font-size: 0.65rem; letter-spacing: 0.14em; text-transform: uppercase; color: rgba(250,247,240,0.15); }
+
+.leaflet-tooltip { background: #1e2d1a !important; border: 1px solid rgba(196,146,42,0.3) !important; box-shadow: none !important; border-radius: 2px !important; padding: 0 !important; }
+.leaflet-tooltip::before { display: none !important; }
+@media (max-width: 560px) { .sidequest { width: 100%; } .hero-meta { gap: 20px; } }
+</style>
+</head>
+<body>
+
+<section class="hero">
+  <div class="hero-bg"></div>
+  <div class="hero-overlay"></div>
+  <div class="hero-content">
+    <div class="route-badge">Roamer Route Guide</div>
+    <h1>Roof<br><em>to</em><br>Rainbow</h1>
+    <div class="hero-meta">
+      <div class="hero-stat"><span class="num">6</span><span class="lbl">Stops</span></div>
+      <div class="hero-stat"><span class="num">6</span><span class="lbl">Countries</span></div>
+      <div class="hero-stat"><span class="num">6–8</span><span class="lbl">Weeks Overland</span></div>
+      <div class="hero-stat"><span class="num">~7,000</span><span class="lbl">Kilometres</span></div>
+    </div>
+  </div>
+  <div class="scroll-cue"><div class="drip"></div>Scroll</div>
+</section>
+
+<section class="intro">
+  <p>East Africa to the Cape — this is the route that <strong>redraws your sense of what the world contains.</strong> Victoria Falls alone drops more water per second than almost any falls on earth, and will make every waterfall you see for the rest of your life feel like a consolation prize. Budget six to eight weeks if you're going overland, which is the only way to really feel the distance. This is not a trip you take. It's a trip that takes you.</p>
+</section>
+
+<section class="map-section">
+  <div class="eyebrow">The Route</div>
+  <div id="overview-map"></div>
+</section>
+
+<div class="stops-heading">
+  <h2>Six stops.<br>One continent, edge to edge.</h2>
+</div>
+
+<!-- STOP 1: MASAI MARA -->
+<article class="stop-card">
+  <div class="stop-photo">
+    <img src="https://images.unsplash.com/photo-1519659528534-7fd733a832a0?q=80&w=1626&auto=format&fit=crop" alt="Masai Mara, Kenya" loading="lazy">
+    <div class="stop-photo-overlay"></div><div class="stop-ghost-num">01</div>
+    <div class="stop-photo-tag">Stop 01 · Kenya</div>
+  </div>
+  <div class="stop-body">
+    <h3>Masai Mara, Kenya</h3>
+    <p class="tagline">The savanna at dawn, before the heat arrives and the world goes still.</p>
+    <p class="desc">The Masai Mara is where the word "safari" earns its meaning. Across 1,500 square kilometres of open grassland, the density of large mammals is among the highest on earth — lions, elephants, cheetahs, giraffes, and in July through October, the Great Migration: two million wildebeest and zebra crossing the Mara River in a spectacle of noise, dust, and crocodiles. Hot air balloons rise at sunrise. The light at that hour, on that landscape, is unreasonable.</p>
+    <div class="fact-chips">
+      <span class="chip gold">Great Migration: Jul–Oct</span><span class="chip">1,500 km² reserve</span><span class="chip">Big Five territory</span><span class="chip">Best: Jun–Oct</span><span class="chip">Don't miss: Balloon at dawn</span>
+    </div>
+  </div>
+</article>
+
+<!-- CONNECTOR 1→2: Masai Mara to Kilimanjaro -->
+<div class="connector"><div class="connector-inner">
+  <div class="transport-mode">🚗 Drive or fly · ~5–6 hr overland</div>
+  <div class="connector-drive"><span class="drive-time">~300 km southeast</span><span class="drive-detail">via Nairobi · or direct flight ~1 hr</span></div>
+  <div class="sq-label">Side Quests Along the Way</div>
+  <div class="sidequests">
+    <div class="sidequest"><span class="sq-icon">🦒</span><div><div class="sq-name">Amboseli National Park</div><div class="sq-note">Elephant herds against Kilimanjaro's backdrop — one of Africa's most iconic views. Lies directly on the Mara–Kili corridor.</div></div></div>
+    <div class="sidequest"><span class="sq-icon">🏙️</span><div><div class="sq-name">Nairobi</div><div class="sq-note">Most overland routes pass through. The Giraffe Centre and Karen Blixen Museum are both worth a morning.</div></div></div>
+  </div>
+</div></div>
+
+<!-- STOP 2: KILIMANJARO -->
+<article class="stop-card">
+  <div class="stop-photo">
+    <img src="https://images.unsplash.com/photo-1489392191049-fc10c97e64b6?q=80&w=1767&auto=format&fit=crop" alt="Mount Kilimanjaro, Tanzania" loading="lazy">
+    <div class="stop-photo-overlay"></div><div class="stop-ghost-num">02</div>
+    <div class="stop-photo-tag">Stop 02 · Tanzania</div>
+  </div>
+  <div class="stop-body">
+    <h3>Mount Kilimanjaro, Tanzania</h3>
+    <p class="tagline">The highest point in Africa rises from flat savanna with no warning and no apology.</p>
+    <p class="desc">Kilimanjaro is the world's tallest free-standing mountain — 5,895 metres of volcanic rock that rises improbably from the Tanzanian plain. You don't need to summit to be awed by it; the approach through cloud forest and moorland is extraordinary in itself. Those who do attempt the summit take 6–8 days via the Marangu or Lemosho routes. The town of Moshi at its base is relaxed and well-equipped for climbers and non-climbers alike.</p>
+    <div class="fact-chips">
+      <span class="chip gold">Summit: 5,895 m (Uhuru Peak)</span><span class="chip">Tallest in Africa</span><span class="chip">Summit: 6–8 day climb</span><span class="chip">Best: Jan–Mar, Jun–Oct</span><span class="chip">Don't miss: Marangu gate trail</span>
+    </div>
+  </div>
+</article>
+
+<!-- CONNECTOR 2→3: Kilimanjaro to Zanzibar -->
+<div class="connector"><div class="connector-inner">
+  <div class="transport-mode">✈️ Fly or drive + ferry · ~1 hr flight</div>
+  <div class="connector-drive"><span class="drive-time">~400 km east to the coast</span><span class="drive-detail">fly Kilimanjaro → Zanzibar direct · or drive to Dar es Salaam + ferry</span></div>
+  <div class="sq-label">Side Quests Along the Way</div>
+  <div class="sidequests">
+    <div class="sidequest"><span class="sq-icon">🌿</span><div><div class="sq-name">Arusha National Park</div><div class="sq-note">Flamingos, giraffes, and Meru mountain in the shadow of Kilimanjaro. A half-day from the airport.</div></div></div>
+    <div class="sidequest"><span class="sq-icon">🦁</span><div><div class="sq-name">Serengeti & Ngorongoro</div><div class="sq-note">If you have time before flying east: the Serengeti and Ngorongoro Crater are northwest of Kilimanjaro and among the world's great wildlife destinations. A significant detour but rarely regretted.</div></div></div>
+  </div>
+  <div class="curator-note">Serengeti and Ngorongoro are northwest of Kilimanjaro, not on the route east to Zanzibar — flagged as a deliberate detour, not a pass-through.</div>
+</div></div>
+
+<!-- STOP 3: ZANZIBAR -->
+<article class="stop-card">
+  <div class="stop-photo">
+    <img src="https://images.unsplash.com/photo-1585887234108-801039e941f5?q=80&w=1770&auto=format&fit=crop" alt="Zanzibar, Tanzania" loading="lazy">
+    <div class="stop-photo-overlay"></div><div class="stop-ghost-num">03</div>
+    <div class="stop-photo-tag">Stop 03 · Tanzania</div>
+  </div>
+  <div class="stop-body">
+    <h3>Zanzibar, Tanzania</h3>
+    <p class="tagline">An island that has been a spice market, a sultanate, a trading post, and a paradise, often simultaneously.</p>
+    <p class="desc">Zanzibar's Stone Town is a UNESCO World Heritage labyrinth of carved doors, narrow alleys, mosques, and markets that smells permanently of cloves and cardamom. The island's east coast beaches — Nungwi, Kendwa, Paje — are legitimately among the finest in the Indian Ocean: white sand, turquoise water, dhows on the horizon. This is where you slow down after the Mara and Kilimanjaro. Give it at least four days.</p>
+    <div class="fact-chips">
+      <span class="chip gold">Stone Town: UNESCO World Heritage</span><span class="chip">Spice island since 16th century</span><span class="chip">Best: Jun–Oct, Dec–Feb</span><span class="chip">Don't miss: Forodhani night market</span><span class="chip">Day trip: Prison Island tortoises</span>
+    </div>
+  </div>
+</article>
+
+<!-- CONNECTOR 3→4: Zanzibar to Victoria Falls -->
+<div class="connector"><div class="connector-inner">
+  <div class="transport-mode">✈️ Fly · ~3–4 hr with connection</div>
+  <div class="connector-drive"><span class="drive-time">~2,400 km southwest</span><span class="drive-detail">fly via Dar es Salaam or Nairobi · overland possible but 3–4 days minimum</span></div>
+  <div class="sq-label">Side Quests Along the Way</div>
+  <div class="sidequests">
+    <div class="sidequest"><span class="sq-icon">🦛</span><div><div class="sq-name">South Luangwa, Zambia</div><div class="sq-note">One of Africa's finest walking safari destinations. Legitimate detour if flying into Zambia — roughly en route to Victoria Falls from the north.</div></div></div>
+    <div class="sidequest"><span class="sq-icon">🐊</span><div><div class="sq-name">Lower Zambezi National Park</div><div class="sq-note">Canoe safaris on the Zambezi with hippos and elephants on the banks. Remote and extraordinary.</div></div></div>
+  </div>
+  <div class="curator-note">This is the longest leg and almost everyone flies it. The overland route via Zambia is possible but involves multiple border crossings and 3–4 hard days. South Luangwa is northwest of Lusaka — verify it's actually en route to Victoria Falls before presenting it as a connector stop.</div>
+</div></div>
+
+<!-- STOP 4: VICTORIA FALLS -->
+<article class="stop-card">
+  <div class="stop-photo">
+    <img src="https://images.unsplash.com/photo-1618811308896-d279d72fdf4d?q=80&w=1744&auto=format&fit=crop" alt="Victoria Falls" loading="lazy">
+    <div class="stop-photo-overlay"></div><div class="stop-ghost-num">04</div>
+    <div class="stop-photo-tag">Stop 04 · Zambia / Zimbabwe</div>
+  </div>
+  <div class="stop-body">
+    <h3>Victoria Falls, Zambia / Zimbabwe</h3>
+    <p class="tagline">Mosi-oa-Tunya. The smoke that thunders. The locals named it first and named it correctly.</p>
+    <p class="desc">Victoria Falls is the largest waterfall on earth by the measure that matters most — the sheer volume of water going over the edge. At peak flow the mist rises 400 metres and can be seen from 50 kilometres away. The falls straddle the Zambia–Zimbabwe border; both sides offer different vantage points and both are worth crossing for. The Devil's Pool, a natural infinity pool at the lip of the falls on the Zambian side, is either thrilling or insane depending on your disposition. Possibly both.</p>
+    <div class="fact-chips">
+      <span class="chip gold">Width: 1,708 m · Height: 108 m</span><span class="chip">UNESCO World Heritage Site</span><span class="chip">Peak flow: Feb–May</span><span class="chip">Best views: Aug–Jan</span><span class="chip">Don't miss: Devil's Pool (Zambia side)</span>
+    </div>
+  </div>
+</article>
+
+<!-- CONNECTOR 4→5: Victoria Falls to Namib Desert -->
+<div class="connector"><div class="connector-inner">
+  <div class="transport-mode">✈️ Fly recommended · ~2 hr to Windhoek</div>
+  <div class="connector-drive"><span class="drive-time">~1,400 km southwest</span><span class="drive-detail">fly to Windhoek then drive ~5 hr · or overland via Botswana (2–3 days)</span></div>
+  <div class="sq-label">Side Quests Along the Way</div>
+  <div class="sidequests">
+    <div class="sidequest"><span class="sq-icon">🦁</span><div><div class="sq-name">Chobe National Park, Botswana</div><div class="sq-note">The highest concentration of elephants in Africa. Directly accessible from Victoria Falls by road — a natural add-on before heading south.</div></div></div>
+    <div class="sidequest"><span class="sq-icon">🌿</span><div><div class="sq-name">Okavango Delta, Botswana</div><div class="sq-note">The world's largest inland delta — water flowing into the Kalahari sand. Mokoro canoe safaris through papyrus channels. A significant detour west but one of Africa's singular experiences.</div></div></div>
+    <div class="sidequest"><span class="sq-icon">🏜️</span><div><div class="sq-name">Etosha National Park, Namibia</div><div class="sq-note">Night drives around a vast salt pan where predators and prey converge at lit waterholes. En route from Windhoek toward the Namib.</div></div></div>
+  </div>
+  <div class="curator-note">Chobe is genuinely adjacent to Victoria Falls and a low-friction add-on. Okavango is a significant detour west — worth flagging as a deliberate diversion. Etosha's position relative to the Windhoek–Namib route needs verification before presenting as "along the way."</div>
+</div></div>
+
+<!-- STOP 5: NAMIB DESERT -->
+<article class="stop-card">
+  <div class="stop-photo">
+    <img src="https://images.unsplash.com/photo-1551176601-c55f81516ba9?q=80&w=1080&auto=format&fit=crop" alt="Namib Desert, Namibia" loading="lazy">
+    <div class="stop-photo-overlay"></div><div class="stop-ghost-num">05</div>
+    <div class="stop-photo-tag">Stop 05 · Namibia</div>
+  </div>
+  <div class="stop-body">
+    <h3>Namib Desert, Namibia</h3>
+    <p class="tagline">The oldest desert on earth. It has been practicing silence for 55 million years.</p>
+    <p class="desc">The Namib is the world's oldest desert and among its most visually extraordinary — rust-red dunes cresting at 300 metres, dead acacia trees in the white clay pan of Deadvlei, fog rolling in from the Atlantic each morning to feed a desert ecosystem that exists nowhere else. Sossusvlei and Deadvlei are the iconic destinations; Dune 45 is the one you climb at sunrise, thighs burning, to watch the shadows pull long across the sand below. The light here is a different quality than anywhere else.</p>
+    <div class="fact-chips">
+      <span class="chip gold">Age: ~55 million years old</span><span class="chip">Dune 45: ~170 m tall</span><span class="chip">Deadvlei trees: 900 yrs dead</span><span class="chip">Best: May–Sep</span><span class="chip">Don't miss: Deadvlei at sunrise</span>
+    </div>
+  </div>
+</article>
+
+<!-- CONNECTOR 5→6: Namib to Cape Town -->
+<div class="connector"><div class="connector-inner">
+  <div class="transport-mode">🚗 Drive · the finest leg of the whole journey</div>
+  <div class="connector-drive"><span class="drive-time">~800 km southeast</span><span class="drive-detail">via the N7 through Namaqualand into the Cape · 2 days comfortable</span></div>
+  <div class="sq-label">Side Quests Along the Way</div>
+  <div class="sidequests">
+    <div class="sidequest"><span class="sq-icon">🌸</span><div><div class="sq-name">Namaqualand (Aug–Sep)</div><div class="sq-note">In spring, this otherwise arid stretch between Namibia and the Cape explodes with wildflowers — one of the most surprising spectacles in southern Africa.</div></div></div>
+    <div class="sidequest"><span class="sq-icon">🦭</span><div><div class="sq-name">Cape Cross Seal Colony</div><div class="sq-note">~100,000 Cape fur seals on a remote beach north of Swakopmund. Noisy, smelly, unforgettable.</div></div></div>
+    <div class="sidequest"><span class="sq-icon">🌊</span><div><div class="sq-name">Swakopmund</div><div class="sq-note">A surreal German colonial town on the Namibian Atlantic coast — bakeries, sand dunes, and quad bikes. Good overnight before the long drive south.</div></div></div>
+  </div>
+  <div class="curator-note">Cape Cross is north of Swakopmund on the coastal road — if driving the N7 inland route, it requires a detour. Worth flagging whether the coastal or inland route makes more sense for this leg.</div>
+</div></div>
+
+<!-- STOP 6: CAPE TOWN -->
+<article class="stop-card">
+  <div class="stop-photo">
+    <img src="https://images.unsplash.com/photo-1580060839134-75a5edca2e99?q=80&w=1771&auto=format&fit=crop" alt="Cape Town, South Africa" loading="lazy">
+    <div class="stop-photo-overlay"></div><div class="stop-ghost-num">06</div>
+    <div class="stop-photo-tag">Stop 06 · Journey's End</div>
+  </div>
+  <div class="stop-body">
+    <h3>Cape Town, South Africa</h3>
+    <p class="tagline">A mountain inside a city, two oceans meeting at the point below, and the best light in the southern hemisphere.</p>
+    <p class="desc">Cape Town ends the route on its own terms — dramatic, beautiful, and slightly unreal after weeks of wilderness. Table Mountain is the first thing and the last thing; take the cable car up at sunset and watch the city go golden below. The Cape Peninsula drive south to Cape Point passes through boulder-strewn penguin colonies, cliff-edge coastal roads, and the meeting of the Atlantic and Indian Oceans. The Winelands are an hour east. The food scene is serious. You will not be ready to leave.</p>
+    <div class="fact-chips">
+      <span class="chip gold">Table Mountain: 1,086 m</span><span class="chip">Population 4.6 million</span><span class="chip">Cape Point: 2 oceans meet</span><span class="chip">Best: Nov–Mar (summer)</span><span class="chip">Don't miss: Cape Peninsula drive</span>
+    </div>
+  </div>
+</article>
+
+<section class="practical">
+  <div class="practical-inner">
+    <h2>Before you go.</h2>
+    <div class="practical-grid">
+      <div class="pcard"><div class="pcard-title">Overland or Fly</div><p>The honest answer is both. The Masai Mara–Kilimanjaro–Zanzibar triangle is manageable overland. Zanzibar to Victoria Falls is a fly leg for most travelers. Victoria Falls to the Namib can be overland via Botswana if you have the time and will. Namib to Cape Town is the one leg that rewards driving above all else.</p></div>
+      <div class="pcard"><div class="pcard-title">When to Go</div><p>June through October is the sweet spot for the wildlife portions — dry season means animals concentrate around water and vegetation is low. Zanzibar is good year-round with two dry seasons. The Namaqualand wildflower bloom is August–September only.</p></div>
+      <div class="pcard"><div class="pcard-title">Visas</div><p>Kenya, Tanzania, Zambia, Zimbabwe, Namibia, and South Africa each have their own requirements. Most nationalities can get East African e-visas covering Kenya and Tanzania together. A KAZA UniVisa covers Zambia and Zimbabwe and is available at major border crossings. Check requirements early.</p></div>
+      <div class="pcard"><div class="pcard-title">How Long</div><p>Six weeks is the minimum to do this without feeling rushed. Eight is comfortable. The temptation to linger — particularly in Zanzibar and the Namib — is real and should be budgeted for. This is not a route that rewards being efficient about it.</p></div>
+      <div class="pcard"><div class="pcard-title">Health</div><p>Malaria prophylaxis is required for Kenya, Tanzania, Zambia, Zimbabwe, and northern Namibia. Yellow fever vaccination may be required depending on your route and nationality. Get travel vaccinations 4–6 weeks before departure. Cape Town is malaria-free.</p></div>
+      <div class="pcard"><div class="pcard-title">The Scale Question</div><p>Africa is larger than you think — larger than the US, China, India, and most of Europe combined. The distances on this route are real. What looks manageable on a map is often two hard days of driving. Build in buffer days. The continent will use them.</p></div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="footer-wm">Roamer</div>
+  <div class="footer-sub">Daily Route Guides</div>
+</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  var stops = [
+    { name: "Masai Mara, Kenya",           lat: -1.4833,  lng: 35.1333 },
+    { name: "Mount Kilimanjaro, Tanzania", lat: -3.0674,  lng: 37.3556 },
+    { name: "Zanzibar, Tanzania",          lat: -6.1659,  lng: 39.1989 },
+    { name: "Victoria Falls, Zambia/Zim",  lat: -17.9243, lng: 25.8572 },
+    { name: "Namib Desert, Namibia",       lat: -24.7545, lng: 15.2793 },
+    { name: "Cape Town, South Africa",     lat: -33.9249, lng: 18.4241 }
+  ];
+  var map = L.map('overview-map', { zoomControl: true, scrollWheelZoom: false, attributionControl: false });
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 10 }).addTo(map);
+  var latlngs = stops.map(function(s){ return [s.lat, s.lng]; });
+  var poly = L.polyline(latlngs, { color: '#c4922a', weight: 2, opacity: 0.7, dashArray: '6,6' }).addTo(map);
+  var goldIcon = L.divIcon({ className: '', html: '<div style="width:9px;height:9px;background:#c4922a;border-radius:50%;border:2px solid rgba(250,247,240,.75);box-shadow:0 0 7px rgba(196,146,42,.5)"></div>', iconSize: [9,9], iconAnchor: [4.5,4.5] });
+  stops.forEach(function(s, i) {
+    L.marker([s.lat, s.lng], { icon: goldIcon }).addTo(map)
+     .bindTooltip('<span style="font-family:Jost,sans-serif;font-size:12px;color:#faf7f0;padding:4px 8px;display:block">' + (i+1) + '. ' + s.name + '</span>', { direction: 'right' });
+  });
+  map.fitBounds(poly.getBounds(), { padding: [28,28] });
+  var cards = document.querySelectorAll('.stop-card');
+  var io = new IntersectionObserver(function(entries) {
+    entries.forEach(function(e) { if (e.isIntersecting) e.target.classList.add('visible'); });
+  }, { threshold: 0.08 });
+  cards.forEach(function(c) { io.observe(c); });
+});
+</script>
+</body>
+</html>

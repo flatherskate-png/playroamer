@@ -1,0 +1,717 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Top to Toe South America — Roamer Route Guide</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300;1,400&family=Jost:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --cream: #fdf8f2;
+  --ink:   #1a1510;
+  --dusk:  #2a1f3d;
+  --ocean: #1a3a5c;
+  --fog:   #8fa8be;
+  --gold:  #c9a85c;
+  --rust:  #b85c3a;
+  --sage:  #7a9e87;
+}
+
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--cream);
+  color: var(--ink);
+  font-family: 'Jost', sans-serif;
+  font-weight: 300;
+  overflow-x: hidden;
+}
+
+/* ── HERO ── */
+.hero {
+  position: relative;
+  height: 100vh;
+  min-height: 600px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  overflow: hidden;
+}
+.hero-bg {
+  position: absolute; inset: 0;
+  background: url('https://images.unsplash.com/photo-1552751753-0fc84ae5b6c8?q=80&w=1770&auto=format&fit=crop') center 45% / cover no-repeat;
+  animation: slowZoom 20s ease-in-out infinite alternate;
+}
+@keyframes slowZoom {
+  from { transform: scale(1.0); }
+  to   { transform: scale(1.06); }
+}
+.hero-overlay {
+  position: absolute; inset: 0;
+  background: linear-gradient(to bottom,
+    rgba(26,21,16,0.02) 0%,
+    rgba(26,21,16,0.08) 45%,
+    rgba(26,21,16,0.78) 75%,
+    rgba(26,21,16,0.93) 100%);
+}
+.hero-content {
+  position: relative; z-index: 2;
+  padding: clamp(36px,5vw,72px) clamp(28px,6vw,80px);
+  max-width: 820px;
+}
+.route-badge {
+  display: inline-flex; align-items: center; gap: 10px;
+  font-size: 0.68rem; font-weight: 500;
+  letter-spacing: 0.2em; text-transform: uppercase;
+  color: var(--gold); margin-bottom: 18px;
+}
+.route-badge::before {
+  content: ''; display: block;
+  width: 22px; height: 1px; background: var(--gold);
+}
+.hero h1 {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: clamp(3.2rem, 8vw, 7rem);
+  font-weight: 300; line-height: 0.9;
+  color: var(--cream); letter-spacing: -0.01em;
+  margin-bottom: 28px;
+}
+.hero h1 em { font-style: italic; color: rgba(245,237,224,0.58); }
+.hero-meta { display: flex; gap: 32px; flex-wrap: wrap; }
+.hero-stat { display: flex; flex-direction: column; gap: 3px; }
+.hero-stat .num {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 1.85rem; font-weight: 300;
+  color: var(--cream); line-height: 1;
+}
+.hero-stat .lbl {
+  font-size: 0.65rem; font-weight: 500;
+  letter-spacing: 0.15em; text-transform: uppercase;
+  color: var(--fog);
+}
+.scroll-cue {
+  position: absolute; bottom: 32px; right: clamp(28px,6vw,80px);
+  z-index: 2; display: flex; flex-direction: column;
+  align-items: center; gap: 8px;
+  color: rgba(245,237,224,0.4); font-size: 0.62rem;
+  letter-spacing: 0.15em; text-transform: uppercase;
+  animation: fadeIn 2s 1.2s both;
+}
+.scroll-cue .drip {
+  width: 1px; height: 44px;
+  background: linear-gradient(to bottom, transparent, rgba(245,237,224,0.4));
+  animation: drip 2.4s 1.4s ease-in-out infinite;
+}
+@keyframes drip {
+  0%,100% { transform: scaleY(1); opacity: 0.4; }
+  55% { transform: scaleY(1.35); opacity: 0.9; }
+}
+@keyframes fadeIn { from { opacity:0; } to { opacity:1; } }
+
+/* ── INTRO ── */
+.intro {
+  max-width: 740px;
+  margin: 80px auto 0;
+  padding: 0 clamp(24px,5vw,60px);
+}
+.intro p {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: clamp(1.3rem, 2.6vw, 1.75rem);
+  font-weight: 300; line-height: 1.68;
+  color: var(--ocean);
+}
+.intro p strong { font-weight: 400; color: var(--rust); }
+
+/* ── OVERVIEW MAP ── */
+.map-section {
+  margin: 64px auto;
+  max-width: 980px;
+  padding: 0 clamp(24px,5vw,60px);
+}
+.eyebrow {
+  font-size: 0.66rem; font-weight: 500;
+  letter-spacing: 0.2em; text-transform: uppercase;
+  color: var(--fog); margin-bottom: 14px;
+  display: flex; align-items: center; gap: 12px;
+}
+.eyebrow::after {
+  content: ''; flex: 1; height: 1px;
+  background: linear-gradient(to right, rgba(143,168,190,0.35), transparent);
+}
+#overview-map {
+  width: 100%; height: 340px;
+  border-radius: 3px; overflow: hidden;
+  border: 1px solid rgba(42,31,61,0.09);
+}
+
+/* ── STOPS HEADING ── */
+.stops-heading {
+  max-width: 980px; margin: 0 auto 52px;
+  padding: 0 clamp(24px,5vw,60px);
+}
+.stops-heading h2 {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: clamp(2rem,4vw,2.9rem);
+  font-weight: 300; color: var(--dusk); line-height: 1.1;
+}
+
+/* ── STOP CARD ── */
+.stop-card {
+  max-width: 980px; margin: 0 auto;
+  padding: 0 clamp(24px,5vw,60px);
+  opacity: 0; transform: translateY(20px);
+  transition: opacity 0.65s ease, transform 0.65s ease;
+}
+.stop-card.visible { opacity: 1; transform: none; }
+
+.stop-photo {
+  position: relative;
+  width: 100%;
+  height: clamp(240px, 40vw, 460px);
+  overflow: hidden;
+  border-radius: 3px 3px 0 0;
+}
+.stop-photo img {
+  width: 100%; height: 100%;
+  object-fit: cover; display: block;
+  transition: transform 0.7s ease;
+}
+.stop-card:hover .stop-photo img { transform: scale(1.03); }
+.stop-photo-overlay {
+  position: absolute; inset: 0;
+  background: linear-gradient(to bottom,
+    rgba(26,21,16,0) 45%,
+    rgba(26,21,16,0.55) 100%);
+  pointer-events: none;
+}
+.stop-ghost-num {
+  position: absolute; top: 14px; right: 20px;
+  font-family: 'Cormorant Garamond', serif;
+  font-size: clamp(3.2rem,7vw,5.5rem);
+  font-weight: 300; color: rgba(245,237,224,0.5);
+  line-height: 1; pointer-events: none; z-index: 2;
+  letter-spacing: -0.02em;
+}
+.stop-photo-tag {
+  position: absolute; bottom: 16px; left: 20px;
+  font-size: 0.63rem; font-weight: 600;
+  letter-spacing: 0.2em; text-transform: uppercase;
+  color: var(--gold); z-index: 2;
+}
+.stop-body {
+  background: var(--dusk);
+  padding: clamp(26px,3.5vw,44px) clamp(22px,4vw,48px);
+  border-radius: 0 0 3px 3px;
+}
+.stop-body h3 {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: clamp(1.65rem,3.2vw,2.3rem);
+  font-weight: 300; color: var(--cream);
+  line-height: 1.12; margin-bottom: 12px;
+}
+.stop-body .tagline {
+  font-family: 'Cormorant Garamond', serif;
+  font-style: italic; font-size: 1.03rem;
+  color: rgba(245,237,224,0.48);
+  line-height: 1.55; margin-bottom: 16px;
+}
+.stop-body p.desc {
+  font-size: 0.87rem; line-height: 1.8;
+  color: rgba(245,237,224,0.68);
+  font-weight: 300; margin-bottom: 22px;
+  max-width: 72ch;
+}
+.fact-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip {
+  font-size: 0.69rem; font-weight: 400;
+  letter-spacing: 0.05em; color: var(--fog);
+  border: 1px solid rgba(143,168,190,0.22);
+  padding: 5px 12px; border-radius: 100px;
+  background: rgba(143,168,190,0.05);
+}
+.chip.gold {
+  color: var(--gold);
+  border-color: rgba(201,168,92,0.28);
+  background: rgba(201,168,92,0.06);
+}
+
+/* ── CONNECTOR ── */
+.connector {
+  max-width: 980px; margin: 0 auto;
+  padding: 0 clamp(24px,5vw,60px);
+}
+.connector-inner {
+  border-left: 1px solid rgba(201,168,92,0.28);
+  margin-left: 10px;
+  padding: 30px 0 30px 32px;
+  position: relative;
+}
+.connector-inner::before {
+  content: '';
+  position: absolute; top: 30px; left: -5px;
+  width: 9px; height: 9px; border-radius: 50%;
+  background: var(--gold);
+  box-shadow: 0 0 8px rgba(201,168,92,0.4);
+}
+.connector-inner::after {
+  content: '';
+  position: absolute; bottom: 30px; left: -5px;
+  width: 9px; height: 9px; border-radius: 50%;
+  background: rgba(201,168,92,0.3);
+  border: 1px solid var(--gold);
+}
+
+/* Long-haul connector variant */
+.connector-journey {
+  display: flex; align-items: flex-start; gap: 16px;
+  margin-bottom: 20px;
+}
+.journey-icon {
+  font-size: 1.1rem; line-height: 1; margin-top: 2px; flex-shrink: 0;
+}
+.journey-main {}
+.journey-time {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 1.3rem; font-weight: 300;
+  color: var(--dusk); line-height: 1;
+  margin-bottom: 3px;
+}
+.journey-detail {
+  font-size: 0.71rem; color: var(--fog);
+  letter-spacing: 0.06em;
+}
+.journey-note {
+  font-size: 0.75rem; font-weight: 300;
+  color: rgba(26,58,92,0.65);
+  margin-top: 5px; line-height: 1.5;
+  max-width: 55ch;
+}
+
+.sq-label {
+  font-size: 0.62rem; font-weight: 600;
+  letter-spacing: 0.2em; text-transform: uppercase;
+  color: var(--rust); margin-bottom: 12px;
+}
+.sidequests {
+  display: flex; flex-wrap: wrap; gap: 10px;
+}
+.sidequest {
+  display: flex; align-items: flex-start; gap: 10px;
+  background: #f5ede8;
+  border: 1px solid rgba(184,92,58,0.13);
+  border-radius: 3px;
+  padding: 10px 14px;
+  width: clamp(200px, 28%, 260px);
+}
+.sq-icon { font-size: 1rem; line-height: 1; margin-top: 1px; flex-shrink: 0; }
+.sq-name { font-size: 0.79rem; font-weight: 500; color: var(--ink); line-height: 1.25; margin-bottom: 3px; }
+.sq-note { font-size: 0.69rem; color: #7a5a4a; font-weight: 300; line-height: 1.45; }
+
+/* ── PRACTICALITIES ── */
+.practical {
+  background: var(--dusk);
+  padding: 72px clamp(24px,6vw,80px);
+  margin-top: 72px;
+}
+.practical-inner { max-width: 980px; margin: 0 auto; }
+.practical h2 {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: clamp(2rem,4vw,2.8rem);
+  font-weight: 300; color: var(--cream);
+  margin-bottom: 48px; line-height: 1.1;
+}
+.practical-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px,1fr));
+  gap: 32px;
+}
+.pcard { border-left: 1px solid rgba(201,168,92,0.3); padding-left: 20px; }
+.pcard-title {
+  font-size: 0.67rem; font-weight: 600;
+  letter-spacing: 0.18em; text-transform: uppercase;
+  color: var(--gold); margin-bottom: 10px;
+}
+.pcard p { font-size: 0.86rem; line-height: 1.75; color: rgba(245,237,224,0.62); font-weight: 300; }
+
+/* ── FOOTER ── */
+footer { background: var(--ink); padding: 36px; text-align: center; }
+.footer-wm {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 1.35rem; font-weight: 300;
+  color: rgba(245,237,224,0.3); letter-spacing: 0.1em; margin-bottom: 6px;
+}
+.footer-sub { font-size: 0.65rem; letter-spacing: 0.14em; text-transform: uppercase; color: rgba(245,237,224,0.15); }
+
+/* ── LEAFLET ── */
+.leaflet-tooltip {
+  background: #2a1f3d !important;
+  border: 1px solid rgba(201,168,92,0.3) !important;
+  box-shadow: none !important;
+  border-radius: 2px !important;
+  padding: 0 !important;
+}
+.leaflet-tooltip::before { display: none !important; }
+
+/* ── RESPONSIVE ── */
+@media (max-width: 560px) {
+  .sidequest { width: 100%; }
+  .hero-meta { gap: 20px; }
+}
+</style>
+</head>
+<body>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-bg"></div>
+  <div class="hero-overlay"></div>
+  <div class="hero-content">
+    <div class="route-badge">Roamer Route Guide</div>
+    <h1>Top to Toe<br><em>South</em><br>America</h1>
+    <div class="hero-meta">
+      <div class="hero-stat"><span class="num">7,700</span><span class="lbl">Miles, tip to toe</span></div>
+      <div class="hero-stat"><span class="num">6</span><span class="lbl">Iconic Stops</span></div>
+      <div class="hero-stat"><span class="num">4–6</span><span class="lbl">Weeks Recommended</span></div>
+      <div class="hero-stat"><span class="num">5</span><span class="lbl">Countries</span></div>
+    </div>
+  </div>
+  <div class="scroll-cue"><div class="drip"></div>Scroll</div>
+</section>
+
+<!-- INTRO -->
+<section class="intro">
+  <p>No other continent asks this much of you — or gives this much back. From the <strong>Caribbean heat of Colombia's walled city</strong> to the wind-scoured silence of Patagonia, this is a journey through altitude sickness, wonder, and the slow, humbling realization that South America is larger than any plan you made for it.</p>
+</section>
+
+<!-- MAP -->
+<section class="map-section">
+  <div class="eyebrow">The Route</div>
+  <div id="overview-map"></div>
+</section>
+
+<!-- STOPS HEADING -->
+<div class="stops-heading">
+  <h2>Six stops.<br>One entire continent.</h2>
+</div>
+
+
+<!-- ══ STOP 1 ══ -->
+<article class="stop-card">
+  <div class="stop-photo">
+    <img src="https://images.unsplash.com/photo-1715503486591-39e62f58a7b3?q=80&w=1770&auto=format&fit=crop" alt="Cartagena, Colombia" loading="lazy">
+    <div class="stop-photo-overlay"></div>
+    <div class="stop-ghost-num">01</div>
+    <div class="stop-photo-tag">Stop 01 · The Gateway</div>
+  </div>
+  <div class="stop-body">
+    <h3>Cartagena, Colombia</h3>
+    <p class="tagline">A walled city the color of ripe fruit, built by conquistadors and claimed, eventually, by everyone else.</p>
+    <p class="desc">Cartagena is your entry point to the continent and an argument, all by itself, for the whole trip. The old walled city — a UNESCO site since 1984 — is a maze of bougainvillea-draped balconies, cobblestone plazas, and colonial churches painted in every shade the tropics can produce. Walk the Castillo de San Felipe at dusk. Eat arepas de huevo for breakfast. Let the Caribbean heat convince you that every subsequent journey will feel this effortless. It won't, but Cartagena earns the illusion.</p>
+    <div class="fact-chips">
+      <span class="chip gold">Old City walls: 11 km of fortifications</span>
+      <span class="chip">UNESCO World Heritage since 1984</span>
+      <span class="chip">Avg temp: 86°F / 30°C year-round</span>
+      <span class="chip">Closest airport: Rafael Núñez (CTG)</span>
+      <span class="chip">Don't miss: Castillo de San Felipe at sunset</span>
+    </div>
+  </div>
+</article>
+
+<!-- CONNECTOR 1→2 -->
+<div class="connector"><div class="connector-inner">
+  <div class="connector-journey">
+    <span class="journey-icon">✈️</span>
+    <div class="journey-main">
+      <div class="journey-time">Fly to Cusco via Bogotá or Lima</div>
+      <div class="journey-detail">~6–9 hrs total travel · 2,600 mi / 4,200 km south</div>
+      <div class="journey-note">One of the more logistically real moments of the trip: there is no easy overland route. Fly. Then spend a full day at altitude in Cusco before attempting Machu Picchu — 11,150 ft will remind you it's there.</div>
+    </div>
+  </div>
+  <div class="sq-label">Worth the Detour</div>
+  <div class="sidequests">
+    <div class="sidequest"><span class="sq-icon">🏙️</span><div><div class="sq-name">Bogotá, Colombia</div><div class="sq-note">The Gold Museum alone justifies a layover. La Candelaria is colonial and gritty in equal measure.</div></div></div>
+    <div class="sidequest"><span class="sq-icon">🌊</span><div><div class="sq-name">Medellín, Colombia</div><div class="sq-note">A city that rewrote its own story. The cable cars over the hillside barrios are as moving as any museum.</div></div></div>
+    <div class="sidequest"><span class="sq-icon">🏔️</span><div><div class="sq-name">Cusco, Peru</div><div class="sq-note">Spend at least two nights acclimatizing. The Plaza de Armas is magnificent; the altitude is merciless.</div></div></div>
+  </div>
+</div></div>
+
+<!-- ══ STOP 2 ══ -->
+<article class="stop-card">
+  <div class="stop-photo">
+    <img src="https://images.unsplash.com/photo-1526392060635-9d6019884377?q=80&w=1770&auto=format&fit=crop" alt="Machu Picchu, Peru" loading="lazy">
+    <div class="stop-photo-overlay"></div>
+    <div class="stop-ghost-num">02</div>
+    <div class="stop-photo-tag">Stop 02 · The Lost City</div>
+  </div>
+  <div class="stop-body">
+    <h3>Machu Picchu, Peru</h3>
+    <p class="tagline">The photographs have not lied to you — but they have failed to convey the altitude, the cloud, and the feeling of standing somewhere that shouldn't exist.</p>
+    <p class="desc">There is no way to be blasé about Machu Picchu. The Inca citadel sits at 7,970 feet above sea level, wedged between two mountain peaks, surrounded on three sides by a sheer drop into cloud forest. The train from Cusco through the Sacred Valley is half the experience. Book the earliest entry slot to beat the crowds and the clouds; by 9am both tend to arrive. The hike up Huayna Picchu, if you can get a permit, changes the view entirely — and the view was already perfect.</p>
+    <div class="fact-chips">
+      <span class="chip gold">Altitude: 7,970 ft / 2,430 m</span>
+      <span class="chip">Built circa 1450, abandoned 1572</span>
+      <span class="chip">UNESCO + New Seven Wonders</span>
+      <span class="chip">Access: train from Aguas Calientes</span>
+      <span class="chip">Daily visitor cap: 5,600</span>
+    </div>
+  </div>
+</article>
+
+<!-- CONNECTOR 2→3 -->
+<div class="connector"><div class="connector-inner">
+  <div class="connector-journey">
+    <span class="journey-icon">🚌</span>
+    <div class="journey-main">
+      <div class="journey-time">Overland to Uyuni via Puno & La Paz</div>
+      <div class="journey-detail">~2–3 days overland · Peru → Bolivia</div>
+      <div class="journey-note">This stretch is the real South America: overnight buses, border crossings at 12,000 ft, Lake Titicaca glittering at dawn. The journey from Cusco to Uyuni via Puno and La Paz is uncomfortable and utterly unforgettable. Flying is faster; overland is the point.</div>
+    </div>
+  </div>
+  <div class="sq-label">Worth the Detour</div>
+  <div class="sidequests">
+    <div class="sidequest"><span class="sq-icon">🚢</span><div><div class="sq-name">Lake Titicaca</div><div class="sq-note">The highest navigable lake on earth. The floating reed islands of the Uros people are unlike anything else on the continent.</div></div></div>
+    <div class="sidequest"><span class="sq-icon">🏔️</span><div><div class="sq-name">La Paz, Bolivia</div><div class="sq-note">The world's highest capital city at 11,942 ft. The cable car system over the city is both transport and tourist attraction.</div></div></div>
+    <div class="sidequest"><span class="sq-icon">💀</span><div><div class="sq-name">Death Road, Bolivia</div><div class="sq-note">The North Yungas Road is now a mountain biking route. Most operators run you downhill — still plenty terrifying.</div></div></div>
+  </div>
+</div></div>
+
+<!-- ══ STOP 3 ══ -->
+<article class="stop-card">
+  <div class="stop-photo">
+    <img src="https://images.unsplash.com/photo-1511213574-c6abde530d6f?q=80&w=1770&auto=format&fit=crop" alt="Salar de Uyuni, Bolivia" loading="lazy">
+    <div class="stop-photo-overlay"></div>
+    <div class="stop-ghost-num">03</div>
+    <div class="stop-photo-tag">Stop 03 · The Salt Flat</div>
+  </div>
+  <div class="stop-body">
+    <h3>Salar de Uyuni, Bolivia</h3>
+    <p class="tagline">The largest mirror on earth. At 11,995 feet, with no horizon, the brain eventually gives up trying to orient itself.</p>
+    <p class="desc">The Salar is the world's largest salt flat — 4,050 square miles of white crust at impossibly high altitude, formed from prehistoric lakes that dried and left only minerals and silence behind. In the dry season it's a cracked white expanse stretching to nothing. In the wet season a thin layer of water turns it into a perfect mirror that reflects the sky so precisely you can't tell where ground ends and atmosphere begins. Take a multi-day 4WD tour; the Atacama border region has geysers, flamingo lagoons, and colored mineral lakes that look implausible even when you're standing in them.</p>
+    <div class="fact-chips">
+      <span class="chip gold">Area: 4,050 sq mi / 10,582 sq km</span>
+      <span class="chip">Altitude: 11,995 ft / 3,656 m</span>
+      <span class="chip">Salt depth: up to 30 ft</span>
+      <span class="chip">Best mirror effect: Dec–Mar</span>
+      <span class="chip">Tours depart from Uyuni town</span>
+    </div>
+  </div>
+</article>
+
+<!-- CONNECTOR 3→4 -->
+<div class="connector"><div class="connector-inner">
+  <div class="connector-journey">
+    <span class="journey-icon">✈️</span>
+    <div class="journey-main">
+      <div class="journey-time">Fly to Puerto Iguazú via Buenos Aires</div>
+      <div class="journey-detail">~4–5 hrs total · Bolivia → Argentina</div>
+      <div class="journey-note">From the altiplano back to jungle. Fly from Uyuni or La Paz to Buenos Aires, then a connecting domestic flight to Puerto Iguazú. The altitude drop — from nearly 12,000 ft to 820 ft — will feel like arriving on a different planet.</div>
+    </div>
+  </div>
+  <div class="sq-label">Worth the Detour</div>
+  <div class="sidequests">
+    <div class="sidequest"><span class="sq-icon">🌿</span><div><div class="sq-name">Amazon Basin, Peru/Brazil</div><div class="sq-note">A serious detour but worth it: Iquitos in Peru or Manaus in Brazil for river lodges and genuine jungle.</div></div></div>
+    <div class="sidequest"><span class="sq-icon">🍷</span><div><div class="sq-name">Mendoza, Argentina</div><div class="sq-note">The Malbec heartland, with the Andes as a backdrop. Add a night if your schedule allows.</div></div></div>
+    <div class="sidequest"><span class="sq-icon">🎭</span><div><div class="sq-name">Asunción, Paraguay</div><div class="sq-note">South America's forgotten capital — warm, slow, and genuinely off the tourist trail.</div></div></div>
+  </div>
+</div></div>
+
+<!-- ══ STOP 4 ══ -->
+<article class="stop-card">
+  <div class="stop-photo">
+    <img src="https://images.unsplash.com/photo-1560451332-343a6986f0cd?q=80&w=1770&auto=format&fit=crop" alt="Iguazu Falls, Argentina" loading="lazy">
+    <div class="stop-photo-overlay"></div>
+    <div class="stop-ghost-num">04</div>
+    <div class="stop-photo-tag">Stop 04 · The Falls</div>
+  </div>
+  <div class="stop-body">
+    <h3>Iguazu Falls, Argentina</h3>
+    <p class="tagline">Eleanor Roosevelt reportedly saw these and said "Poor Niagara." Roosevelt was being generous to Niagara.</p>
+    <p class="desc">Iguazu is 1.7 miles wide and contains 275 individual falls — the largest of which, the Garganta del Diablo (Devil's Throat), drops 269 feet in a thundering U-shaped canyon that fills the air with mist visible from kilometers away. The Argentine side gets you closest; the Brazilian side gives you the panoramic view. Do both if you can — it's a short bus ride across the border and they are genuinely different experiences. The surrounding subtropical jungle is a national park on both sides and harbors toucans, coatis, and caiman along the riverbanks.</p>
+    <div class="fact-chips">
+      <span class="chip gold">Width: 1.7 mi / 2.7 km</span>
+      <span class="chip">275 individual cataracts</span>
+      <span class="chip">Devil's Throat: 269 ft / 82 m drop</span>
+      <span class="chip">UNESCO Heritage on both sides</span>
+      <span class="chip">Argentina: up close · Brazil: panoramic</span>
+    </div>
+  </div>
+</article>
+
+<!-- CONNECTOR 4→5 -->
+<div class="connector"><div class="connector-inner">
+  <div class="connector-journey">
+    <span class="journey-icon">✈️</span>
+    <div class="journey-main">
+      <div class="journey-time">Fly to Buenos Aires</div>
+      <div class="journey-detail">~2 hrs · Puerto Iguazú → Ezeiza (EZE)</div>
+      <div class="journey-note">Short hop down to the capital. The bus is also a reasonable option — 18 hours overnight, and the Pampas are flat enough that you'll sleep through most of it.</div>
+    </div>
+  </div>
+  <div class="sq-label">Worth the Detour</div>
+  <div class="sidequests">
+    <div class="sidequest"><span class="sq-icon">🐄</span><div><div class="sq-name">The Pampas</div><div class="sq-note">Estancia day-trips from Buenos Aires for asado, gauchos, and the flattest land on earth. A total gear-change after the falls.</div></div></div>
+    <div class="sidequest"><span class="sq-icon">🎶</span><div><div class="sq-name">Colonia del Sacramento, Uruguay</div><div class="sq-note">A one-hour ferry from Buenos Aires to a perfectly preserved Portuguese colonial town. Good wine and slower WiFi.</div></div></div>
+    <div class="sidequest"><span class="sq-icon">🌊</span><div><div class="sq-name">Montevideo, Uruguay</div><div class="sq-note">Underrated, walkable, and genuinely charming. The Mercado del Puerto on a Sunday is one of the continent's great culinary experiences.</div></div></div>
+  </div>
+</div></div>
+
+<!-- ══ STOP 5 ══ -->
+<article class="stop-card">
+  <div class="stop-photo">
+    <img src="https://images.unsplash.com/photo-1627423455908-0bcc87157b02?q=80&w=1770&auto=format&fit=crop" alt="Buenos Aires, Argentina" loading="lazy">
+    <div class="stop-photo-overlay"></div>
+    <div class="stop-ghost-num">05</div>
+    <div class="stop-photo-tag">Stop 05 · The Capital of Everything</div>
+  </div>
+  <div class="stop-body">
+    <h3>Buenos Aires, Argentina</h3>
+    <p class="tagline">Eight million people who eat dinner at midnight, take tango personally, and are correct about the steak.</p>
+    <p class="desc">Buenos Aires is where South America puts on its best clothes and refuses to go to bed. The city is vast, elegant, and built on a scale that makes European capitals feel provincial — wide Haussmann-influenced boulevards, enormous parks, neighborhoods each with their own personality and accent. Palermo for restaurants and galleries, San Telmo for tango and antiques, La Boca for color and football mythology. The asado culture alone justifies a long stay. Give it at least four days; it will feel insufficient.</p>
+    <div class="fact-chips">
+      <span class="chip gold">Population: 15 million metro area</span>
+      <span class="chip">Widest avenue on earth: 9 de Julio</span>
+      <span class="chip">Second largest opera house in world</span>
+      <span class="chip">Best months: Mar–May, Sep–Nov</span>
+      <span class="chip">Don't miss: La Recoleta Cemetery at dusk</span>
+    </div>
+  </div>
+</article>
+
+<!-- CONNECTOR 5→6 -->
+<div class="connector"><div class="connector-inner">
+  <div class="connector-journey">
+    <span class="journey-icon">✈️</span>
+    <div class="journey-main">
+      <div class="journey-time">Fly to El Calafate or Punta Arenas</div>
+      <div class="journey-detail">~3–4 hrs · Buenos Aires → Patagonia</div>
+      <div class="journey-note">The south is not casually reachable by land — Patagonia begins where the roads become suggestions. Fly to El Calafate for the Perito Moreno glacier, or Punta Arenas for Torres del Paine. Both are right. The wind will be waiting for you either way.</div>
+    </div>
+  </div>
+  <div class="sq-label">Worth the Detour</div>
+  <div class="sidequests">
+    <div class="sidequest"><span class="sq-icon">🐧</span><div><div class="sq-name">Punta Tombo, Argentina</div><div class="sq-note">The largest Magellanic penguin colony on the continent. A million birds, completely unimpressed by you.</div></div></div>
+    <div class="sidequest"><span class="sq-icon">🚢</span><div><div class="sq-name">Ushuaia, Tierra del Fuego</div><div class="sq-note">The southernmost city on earth. Ferries to Antarctica depart from here; just seeing the harbor in winter is enough.</div></div></div>
+    <div class="sidequest"><span class="sq-icon">🗺️</span><div><div class="sq-name">Bariloche, Argentina</div><div class="sq-note">Swiss-looking chocolate-town in the lake district, ringed by Andean peaks. Ski in winter, hike in summer.</div></div></div>
+  </div>
+</div></div>
+
+<!-- ══ STOP 6 ══ -->
+<article class="stop-card">
+  <div class="stop-photo">
+    <img src="https://images.unsplash.com/photo-1552751753-0fc84ae5b6c8?q=80&w=1770&auto=format&fit=crop" alt="Patagonia, Argentina" loading="lazy">
+    <div class="stop-photo-overlay"></div>
+    <div class="stop-ghost-num">06</div>
+    <div class="stop-photo-tag">Stop 06 · The End of the World</div>
+  </div>
+  <div class="stop-body">
+    <h3>Patagonia, Argentina</h3>
+    <p class="tagline">The wind here is not weather. It is geography. It will push you sideways, make you laugh, and reset something in you that you didn't know needed resetting.</p>
+    <p class="desc">Patagonia is less a place than a condition — a vast, windswept region spanning southern Argentina and Chile, defined by granite spires, calving glaciers, and the particular silence of land that has never been crowded. The Perito Moreno Glacier, one of the few in the world that is not retreating, advances at a rate of 6 feet per day and periodically collapses into Lake Argentina in explosions of blue ice. Torres del Paine, across the Chilean border, is the continent's great hiking destination. The W Trek takes five days. The light here, at the bottom of the world, is unlike anywhere else.</p>
+    <div class="fact-chips">
+      <span class="chip gold">Perito Moreno: advances ~6 ft per day</span>
+      <span class="chip">Torres del Paine: W Trek 5 days</span>
+      <span class="chip">Best season: Nov–Mar</span>
+      <span class="chip">Winds regularly exceed 75 mph</span>
+      <span class="chip">Fly out via Punta Arenas or El Calafate</span>
+    </div>
+  </div>
+</article>
+
+
+<!-- PRACTICALITIES -->
+<section class="practical">
+  <div class="practical-inner">
+    <h2>Before you go.</h2>
+    <div class="practical-grid">
+      <div class="pcard">
+        <div class="pcard-title">The Altitude Question</div>
+        <p>Cusco, Uyuni, and Lake Titicaca all sit above 11,000 feet. Altitude sickness is real and doesn't discriminate by fitness level. Spend two nights in Cusco before heading to Machu Picchu. Avoid alcohol, drink water constantly, and consider acetazolamide if your doctor approves. Don't rush the high section of this route.</p>
+      </div>
+      <div class="pcard">
+        <div class="pcard-title">Flying vs. Overland</div>
+        <p>This route spans 7,700 miles. Bus travel between the major stops is possible but involves multi-day journeys on roads that range from superb to genuinely challenging. Budget travellers take the buses; everyone gets the story. The sweet spot is flying the longest hops (Cartagena–Cusco, Uyuni–Iguazú) and going overland where the journey is the point.</p>
+      </div>
+      <div class="pcard">
+        <div class="pcard-title">Best Time to Travel</div>
+        <p>There is no universally perfect season. The Salar de Uyuni's mirror effect requires the wet season (Dec–Mar). Patagonia is most accessible Nov–Mar. The Amazon is beautiful in wet season and navigable in dry. A 4–6 week trip will inevitably span two climate zones — dress in layers, pack light, and accept that somewhere will be the wrong season.</p>
+      </div>
+      <div class="pcard">
+        <div class="pcard-title">Currency and Cards</div>
+        <p>Argentina's currency situation requires research before you arrive — exchange rates fluctuate significantly and the gap between official and parallel rates has historically been dramatic. Bolivia and Peru are largely cash economies outside major cities. Carry US dollars as a backup; they are accepted or exchangeable everywhere on the continent.</p>
+      </div>
+      <div class="pcard">
+        <div class="pcard-title">Safety and Sense</div>
+        <p>South America's reputation is worse than its reality in most tourist areas, but basic precautions apply everywhere: use registered taxis or apps, don't flash expensive equipment, and trust your instincts. Cartagena and Buenos Aires have the most street-smart requirements; Patagonia and Uyuni are among the safest environments on the continent.</p>
+      </div>
+      <div class="pcard">
+        <div class="pcard-title">How Long You Really Need</div>
+        <p>Four weeks is the minimum to feel like you've arrived rather than just passed through. Six is the honest answer. Machu Picchu and the Salar alone deserve a week between them when you factor in transit and acclimatization. Patagonia will steal days you didn't budget. The continent rewards those who leave room in the itinerary for the itinerary to change.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="footer-wm">Roamer</div>
+  <div class="footer-sub">Daily Route Guides</div>
+</footer>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+
+  // ── MAP ──
+  const stops = [
+    { name: "Cartagena, Colombia",        lat: 10.426557,  lng: -75.544167 },
+    { name: "Machu Picchu, Peru",         lat: -13.164341, lng: -72.545009 },
+    { name: "Salar de Uyuni, Bolivia",    lat: -20.204264, lng: -67.514995 },
+    { name: "Iguazu Falls, Argentina",    lat: -25.692532, lng: -54.441114 },
+    { name: "Buenos Aires, Argentina",    lat: -34.609558, lng: -58.388790 },
+    { name: "Patagonia, Argentina",       lat: -51.653887, lng: -69.292194 },
+  ];
+
+  const map = L.map('overview-map', {
+    zoomControl: true,
+    scrollWheelZoom: false,
+    attributionControl: false,
+  });
+
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    maxZoom: 14
+  }).addTo(map);
+
+  const latlngs = stops.map(s => [s.lat, s.lng]);
+  const poly = L.polyline(latlngs, {
+    color: '#c9a85c', weight: 2, opacity: 0.7, dashArray: '6,6'
+  }).addTo(map);
+
+  const goldIcon = L.divIcon({
+    className: '',
+    html: `<div style="width:9px;height:9px;background:#c9a85c;border-radius:50%;border:2px solid rgba(245,237,224,.75);box-shadow:0 0 7px rgba(201,168,92,.5)"></div>`,
+    iconSize: [9,9], iconAnchor: [4.5,4.5]
+  });
+
+  stops.forEach((s, i) => {
+    L.marker([s.lat, s.lng], { icon: goldIcon }).addTo(map)
+     .bindTooltip(
+       `<span style="font-family:Jost,sans-serif;font-size:12px;color:#f5ede0;padding:4px 8px;display:block">${i+1}. ${s.name}</span>`,
+       { direction: 'right' }
+     );
+  });
+
+  map.fitBounds(poly.getBounds(), { padding: [28,28] });
+
+  // ── SCROLL REVEAL ──
+  const cards = document.querySelectorAll('.stop-card');
+  const io = new IntersectionObserver(entries => {
+    entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible'); });
+  }, { threshold: 0.08 });
+  cards.forEach(c => io.observe(c));
+});
+</script>
+</body>
+</html>

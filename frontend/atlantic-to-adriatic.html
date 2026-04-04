@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Atlantic to Adriatic — Roamer Route Guide</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300;1,400&family=Jost:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --cream: #f8f6f2; --ink: #12100e; --dusk: #1a1f2e;
+  --slate: #3a4a6b; --gold: #a08040; --fog: #8a94a8;
+  --rust: #7a3a2a; --mist: #c8d0dc;
+}
+html { scroll-behavior: smooth; }
+body { background: var(--cream); color: var(--ink); font-family: 'Jost', sans-serif; font-weight: 300; overflow-x: hidden; }
+
+.hero { position: relative; height: 100vh; min-height: 600px; display: flex; flex-direction: column; justify-content: flex-end; overflow: hidden; }
+.hero-bg { position: absolute; inset: 0; background: url('https://images.unsplash.com/photo-1498307833015-e7b400441eb8?q=80&w=1740&auto=format&fit=crop') center 40% / cover no-repeat; animation: slowZoom 20s ease-in-out infinite alternate; }
+@keyframes slowZoom { from { transform: scale(1.0); } to { transform: scale(1.06); } }
+.hero-overlay { position: absolute; inset: 0; background: linear-gradient(to bottom, rgba(18,16,14,0.05) 0%, rgba(18,16,14,0.12) 40%, rgba(18,16,14,0.78) 72%, rgba(18,16,14,0.94) 100%); }
+.hero-content { position: relative; z-index: 2; padding: clamp(36px,5vw,72px) clamp(28px,6vw,80px); max-width: 820px; }
+.route-badge { display: inline-flex; align-items: center; gap: 10px; font-size: 0.68rem; font-weight: 500; letter-spacing: 0.2em; text-transform: uppercase; color: var(--gold); margin-bottom: 18px; }
+.route-badge::before { content: ''; display: block; width: 22px; height: 1px; background: var(--gold); }
+.hero h1 { font-family: 'Cormorant Garamond', serif; font-size: clamp(3.2rem, 8vw, 7rem); font-weight: 300; line-height: 0.9; color: var(--cream); letter-spacing: -0.01em; margin-bottom: 28px; }
+.hero h1 em { font-style: italic; color: rgba(248,246,242,0.52); }
+.hero-meta { display: flex; gap: 32px; flex-wrap: wrap; }
+.hero-stat { display: flex; flex-direction: column; gap: 3px; }
+.hero-stat .num { font-family: 'Cormorant Garamond', serif; font-size: 1.85rem; font-weight: 300; color: var(--cream); line-height: 1; }
+.hero-stat .lbl { font-size: 0.65rem; font-weight: 500; letter-spacing: 0.15em; text-transform: uppercase; color: var(--fog); }
+.scroll-cue { position: absolute; bottom: 32px; right: clamp(28px,6vw,80px); z-index: 2; display: flex; flex-direction: column; align-items: center; gap: 8px; color: rgba(248,246,242,0.38); font-size: 0.62rem; letter-spacing: 0.15em; text-transform: uppercase; animation: fadeIn 2s 1.2s both; }
+.scroll-cue .drip { width: 1px; height: 44px; background: linear-gradient(to bottom, transparent, rgba(248,246,242,0.38)); animation: drip 2.4s 1.4s ease-in-out infinite; }
+@keyframes drip { 0%,100% { transform: scaleY(1); opacity: 0.4; } 55% { transform: scaleY(1.35); opacity: 0.9; } }
+@keyframes fadeIn { from { opacity:0; } to { opacity:1; } }
+
+.intro { max-width: 740px; margin: 80px auto 0; padding: 0 clamp(24px,5vw,60px); }
+.intro p { font-family: 'Cormorant Garamond', serif; font-size: clamp(1.3rem, 2.6vw, 1.75rem); font-weight: 300; line-height: 1.68; color: #1e2030; }
+.intro p strong { font-weight: 400; color: var(--slate); }
+
+.map-section { margin: 64px auto; max-width: 980px; padding: 0 clamp(24px,5vw,60px); }
+.eyebrow { font-size: 0.66rem; font-weight: 500; letter-spacing: 0.2em; text-transform: uppercase; color: var(--fog); margin-bottom: 14px; display: flex; align-items: center; gap: 12px; }
+.eyebrow::after { content: ''; flex: 1; height: 1px; background: linear-gradient(to right, rgba(138,148,168,0.35), transparent); }
+#overview-map { width: 100%; height: 340px; border-radius: 3px; overflow: hidden; border: 1px solid rgba(26,31,46,0.1); }
+
+.stops-heading { max-width: 980px; margin: 0 auto 52px; padding: 0 clamp(24px,5vw,60px); }
+.stops-heading h2 { font-family: 'Cormorant Garamond', serif; font-size: clamp(2rem,4vw,2.9rem); font-weight: 300; color: var(--dusk); line-height: 1.1; }
+
+.stop-card { max-width: 980px; margin: 0 auto; padding: 0 clamp(24px,5vw,60px); opacity: 0; transform: translateY(20px); transition: opacity 0.65s ease, transform 0.65s ease; }
+.stop-card.visible { opacity: 1; transform: none; }
+.stop-photo { position: relative; width: 100%; height: clamp(240px, 40vw, 460px); overflow: hidden; border-radius: 3px 3px 0 0; }
+.stop-photo img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform 0.7s ease; }
+.stop-card:hover .stop-photo img { transform: scale(1.03); }
+.stop-photo-overlay { position: absolute; inset: 0; background: linear-gradient(to bottom, rgba(18,16,14,0) 45%, rgba(18,16,14,0.55) 100%); pointer-events: none; }
+.stop-ghost-num { position: absolute; top: 14px; right: 20px; font-family: 'Cormorant Garamond', serif; font-size: clamp(3.2rem,7vw,5.5rem); font-weight: 300; color: rgba(248,246,242,0.48); line-height: 1; pointer-events: none; z-index: 2; letter-spacing: -0.02em; }
+.stop-photo-tag { position: absolute; bottom: 16px; left: 20px; font-size: 0.63rem; font-weight: 600; letter-spacing: 0.2em; text-transform: uppercase; color: var(--gold); z-index: 2; }
+.stop-body { background: var(--dusk); padding: clamp(26px,3.5vw,44px) clamp(22px,4vw,48px); border-radius: 0 0 3px 3px; }
+.stop-body h3 { font-family: 'Cormorant Garamond', serif; font-size: clamp(1.65rem,3.2vw,2.3rem); font-weight: 300; color: var(--cream); line-height: 1.12; margin-bottom: 12px; }
+.stop-body .tagline { font-family: 'Cormorant Garamond', serif; font-style: italic; font-size: 1.03rem; color: rgba(248,246,242,0.46); line-height: 1.55; margin-bottom: 16px; }
+.stop-body p.desc { font-size: 0.87rem; line-height: 1.8; color: rgba(248,246,242,0.66); font-weight: 300; margin-bottom: 22px; max-width: 72ch; }
+.fact-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { font-size: 0.69rem; font-weight: 400; letter-spacing: 0.05em; color: var(--fog); border: 1px solid rgba(138,148,168,0.25); padding: 5px 12px; border-radius: 100px; background: rgba(138,148,168,0.06); }
+.chip.gold { color: var(--gold); border-color: rgba(160,128,64,0.3); background: rgba(160,128,64,0.07); }
+
+.connector { max-width: 980px; margin: 0 auto; padding: 0 clamp(24px,5vw,60px); }
+.connector-inner { border-left: 1px solid rgba(160,128,64,0.28); margin-left: 10px; padding: 30px 0 30px 32px; position: relative; }
+.connector-inner::before { content: ''; position: absolute; top: 30px; left: -5px; width: 9px; height: 9px; border-radius: 50%; background: var(--gold); box-shadow: 0 0 8px rgba(160,128,64,0.4); }
+.connector-inner::after { content: ''; position: absolute; bottom: 30px; left: -5px; width: 9px; height: 9px; border-radius: 50%; background: rgba(160,128,64,0.3); border: 1px solid var(--gold); }
+.connector-drive { display: flex; align-items: baseline; gap: 10px; margin-bottom: 20px; }
+.drive-time { font-family: 'Cormorant Garamond', serif; font-size: 1.3rem; font-weight: 300; color: var(--dusk); line-height: 1; }
+.drive-detail { font-size: 0.71rem; color: var(--fog); letter-spacing: 0.06em; }
+.sq-label { font-size: 0.62rem; font-weight: 600; letter-spacing: 0.2em; text-transform: uppercase; color: var(--rust); margin-bottom: 12px; }
+.sidequests { display: flex; flex-wrap: wrap; gap: 10px; }
+.sidequest { display: flex; align-items: flex-start; gap: 10px; background: #eef0f6; border: 1px solid rgba(58,74,107,0.13); border-radius: 3px; padding: 10px 14px; width: clamp(200px, 28%, 260px); }
+.sq-icon { font-size: 1rem; line-height: 1; margin-top: 1px; flex-shrink: 0; }
+.sq-name { font-size: 0.79rem; font-weight: 500; color: var(--ink); line-height: 1.25; margin-bottom: 3px; }
+.sq-note { font-size: 0.69rem; color: #3a4a6b; font-weight: 300; line-height: 1.45; }
+
+.transport-mode { display: inline-flex; align-items: center; gap: 6px; font-size: 0.68rem; font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase; color: var(--gold); background: rgba(160,128,64,0.1); border: 1px solid rgba(160,128,64,0.25); border-radius: 100px; padding: 4px 12px; margin-bottom: 16px; }
+
+.practical { background: var(--dusk); padding: 72px clamp(24px,6vw,80px); margin-top: 72px; }
+.practical-inner { max-width: 980px; margin: 0 auto; }
+.practical h2 { font-family: 'Cormorant Garamond', serif; font-size: clamp(2rem,4vw,2.8rem); font-weight: 300; color: var(--cream); margin-bottom: 48px; line-height: 1.1; }
+.practical-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px,1fr)); gap: 32px; }
+.pcard { border-left: 1px solid rgba(160,128,64,0.3); padding-left: 20px; }
+.pcard-title { font-size: 0.67rem; font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase; color: var(--gold); margin-bottom: 10px; }
+.pcard p { font-size: 0.86rem; line-height: 1.75; color: rgba(248,246,242,0.62); font-weight: 300; }
+
+footer { background: var(--ink); padding: 36px; text-align: center; }
+.footer-wm { font-family: 'Cormorant Garamond', serif; font-size: 1.35rem; font-weight: 300; color: rgba(248,246,242,0.3); letter-spacing: 0.1em; margin-bottom: 6px; }
+.footer-sub { font-size: 0.65rem; letter-spacing: 0.14em; text-transform: uppercase; color: rgba(248,246,242,0.15); }
+
+.leaflet-tooltip { background: #1a1f2e !important; border: 1px solid rgba(160,128,64,0.3) !important; box-shadow: none !important; border-radius: 2px !important; padding: 0 !important; }
+.leaflet-tooltip::before { display: none !important; }
+@media (max-width: 560px) { .sidequest { width: 100%; } .hero-meta { gap: 20px; } }
+</style>
+</head>
+<body>
+
+<section class="hero">
+  <div class="hero-bg"></div>
+  <div class="hero-overlay"></div>
+  <div class="hero-content">
+    <div class="route-badge">Roamer Route Guide</div>
+    <h1>Atlantic<br><em>to</em><br>Adriatic</h1>
+    <div class="hero-meta">
+      <div class="hero-stat"><span class="num">6</span><span class="lbl">Stops</span></div>
+      <div class="hero-stat"><span class="num">6</span><span class="lbl">Countries</span></div>
+      <div class="hero-stat"><span class="num">2–4</span><span class="lbl">Weeks</span></div>
+      <div class="hero-stat"><span class="num">~2,200</span><span class="lbl">Kilometres</span></div>
+    </div>
+  </div>
+  <div class="scroll-cue"><div class="drip"></div>Scroll</div>
+</section>
+
+<section class="intro">
+  <p>London to Dubrovnik by rail is one of those trips that sounds like a fantasy until you actually price it out and realize it's <strong>entirely doable.</strong> Interrail passes still exist, bless them, and the route practically plans itself — Paris, the Swiss Alps, Venice, then Croatia's walled city on the Adriatic, which was so photogenic it doubled as King's Landing. Three to four weeks is civilized. Two is possible but you'll spend the flight home making a list of everything you missed.</p>
+</section>
+
+<section class="map-section">
+  <div class="eyebrow">The Route</div>
+  <div id="overview-map"></div>
+</section>
+
+<div class="stops-heading">
+  <h2>Six stops.<br>One continent, coast to coast.</h2>
+</div>
+
+<!-- STOP 1: LONDON -->
+<article class="stop-card">
+  <div class="stop-photo">
+    <img src="https://images.unsplash.com/photo-1486299267070-83823f5448dd?q=80&w=1770&auto=format&fit=crop" alt="London, United Kingdom" loading="lazy">
+    <div class="stop-photo-overlay"></div><div class="stop-ghost-num">01</div>
+    <div class="stop-photo-tag">Stop 01 · United Kingdom</div>
+  </div>
+  <div class="stop-body">
+    <h3>London, United Kingdom</h3>
+    <p class="tagline">The city that invented the idea of a city and has been arguing with itself about it ever since.</p>
+    <p class="desc">London is where the route begins and where most people spend too little time — three days minimum, four is better. The British Museum alone is a full day if you let it be. The neighborhoods reward wandering: Shoreditch and Bermondsey for food and art, South Bank for the river, Notting Hill on a Saturday morning when the market is running. St. Paul's from the Millennium Bridge at dusk. The Tube is a miracle. Use it.</p>
+    <div class="fact-chips">
+      <span class="chip gold">Population 9 million+</span><span class="chip">2,000 years of continuous habitation</span><span class="chip">300+ languages spoken</span><span class="chip">Best: May–Sep</span><span class="chip">Don't miss: Borough Market</span>
+    </div>
+  </div>
+</article>
+
+<!-- CONNECTOR 1→2: London to Amsterdam -->
+<div class="connector"><div class="connector-inner">
+  <div class="transport-mode">🚆 Eurostar · ~4 hr via Brussels</div>
+  <div class="connector-drive"><span class="drive-time">~500 km northeast</span><span class="drive-detail">London St Pancras → Amsterdam Centraal · direct Eurostar ~3.5 hr</span></div>
+  <div class="sq-label">Side Quests Along the Way</div>
+  <div class="sidequests">
+    <div class="sidequest"><span class="sq-icon">🍫</span><div><div class="sq-name">Brussels, Belgium</div><div class="sq-note">Most Eurostar routes connect here. The Grand-Place is one of Europe's finest squares. Frites, waffles, and beer are not optional.</div></div></div>
+    <div class="sidequest"><span class="sq-icon">🌷</span><div><div class="sq-name">Bruges, Belgium</div><div class="sq-note">Medieval canal city an hour from Brussels. Quieter than Amsterdam and in some ways more beautiful. Easy overnight.</div></div></div>
+    <div class="sidequest"><span class="sq-icon">🎨</span><div><div class="sq-name">Ghent, Belgium</div><div class="sq-note">A university city with a striking medieval centre, the Van Eyck altarpiece, and a grittier, less-touristed feel than Bruges.</div></div></div>
+  </div>
+</div></div>
+
+<!-- STOP 2: AMSTERDAM -->
+<article class="stop-card">
+  <div class="stop-photo">
+    <img src="https://images.unsplash.com/photo-1669586618689-830661fe3b39?q=80&w=1770&auto=format&fit=crop" alt="Amsterdam, Netherlands" loading="lazy">
+    <div class="stop-photo-overlay"></div><div class="stop-ghost-num">02</div>
+    <div class="stop-photo-tag">Stop 02 · Netherlands</div>
+  </div>
+  <div class="stop-body">
+    <h3>Amsterdam, Netherlands</h3>
+    <p class="tagline">A city built on water and compromise, which turns out to be a surprisingly durable combination.</p>
+    <p class="desc">Amsterdam's 165 canals and 1,500 bridges create a city that is best understood by getting lost in it, preferably by bicycle. The Rijksmuseum and the Van Gogh Museum are essential; the Anne Frank House requires booking weeks in advance. The Jordaan neighbourhood — narrow streets, brown cafes, independent bookshops — is where you'll spend more time than planned. The city is smaller than it feels and more complex than it looks.</p>
+    <div class="fact-chips">
+      <span class="chip gold">165 canals, 1,500 bridges</span><span class="chip">Population 900,000</span><span class="chip">Rijksmuseum: 8,000+ works</span><span class="chip">Best: Apr–Oct</span><span class="chip">Don't miss: Jordaan by bicycle</span>
+    </div>
+  </div>
+</article>
+
+<!-- CONNECTOR 2→3: Amsterdam to Paris -->
+<div class="connector"><div class="connector-inner">
+  <div class="transport-mode">🚆 Thalys / Eurostar · ~3.5 hr</div>
+  <div class="connector-drive"><span class="drive-time">~500 km south</span><span class="drive-detail">Amsterdam Centraal → Paris Gare du Nord direct · ~3.5 hr</span></div>
+  <div class="sq-label">Side Quests Along the Way</div>
+  <div class="sidequests">
+    <div class="sidequest"><span class="sq-icon">🖼️</span><div><div class="sq-name">Haarlem, Netherlands</div><div class="sq-note">Amsterdam's quieter neighbour — beautiful Frans Hals Museum, a great Saturday market, 20 min by train from Centraal.</div></div></div>
+    <div class="sidequest"><span class="sq-icon">🌷</span><div><div class="sq-name">Keukenhof (Mar–May)</div><div class="sq-note">Seven million tulips in bloom across 32 hectares. Only open spring — if your timing is right, don't miss it.</div></div></div>
+  </div>
+</div></div>
+
+<!-- STOP 3: PARIS -->
+<article class="stop-card">
+  <div class="stop-photo">
+    <img src="https://images.unsplash.com/photo-1502602898657-3e91760cbb34?q=80&w=1770&auto=format&fit=crop" alt="Paris, France" loading="lazy">
+    <div class="stop-photo-overlay"></div><div class="stop-ghost-num">03</div>
+    <div class="stop-photo-tag">Stop 03 · France</div>
+  </div>
+  <div class="stop-body">
+    <h3>Paris, France</h3>
+    <p class="tagline">It really is that beautiful. This is annoying but true.</p>
+    <p class="desc">Paris is the most written-about city on earth for a reason that becomes obvious within the first hour: it is simply, almost unfairly, beautiful. The Haussmann boulevards, the river, the light on the stone in the late afternoon — it looks like a painting because generations of painters came here to paint it. The Louvre is too large to do properly in a day; pick two or three rooms and go deep. The Musée d'Orsay fits in a morning and is, for money, the finest art museum in Europe. Eat everything.</p>
+    <div class="fact-chips">
+      <span class="chip gold">Population 2.1 million (city proper)</span><span class="chip">The Louvre: 35,000 works on display</span><span class="chip">Eiffel Tower: built 1889</span><span class="chip">Best: Apr–Jun, Sep–Oct</span><span class="chip">Don't miss: Musée d'Orsay</span>
+    </div>
+  </div>
+</article>
+
+<!-- CONNECTOR 3→4: Paris to Interlaken -->
+<div class="connector"><div class="connector-inner">
+  <div class="transport-mode">🚆 Train · ~4.5 hr</div>
+  <div class="connector-drive"><span class="drive-time">~550 km southeast</span><span class="drive-detail">Paris Gare de Lyon → Bern → Interlaken Ost · change at Bern</span></div>
+  <div class="sq-label">Side Quests Along the Way</div>
+  <div class="sidequests">
+    <div class="sidequest"><span class="sq-icon">🍷</span><div><div class="sq-name">Burgundy Wine Region</div><div class="sq-note">The train passes through Dijon — gateway to Burgundy. A one-night detour into Beaune earns serious wine country credentials.</div></div></div>
+    <div class="sidequest"><span class="sq-icon">🏔️</span><div><div class="sq-name">Bern, Switzerland</div><div class="sq-note">The Swiss capital is a mandatory connection and an underrated stop — a UNESCO old town of arcaded medieval streets and bears.</div></div></div>
+    <div class="sidequest"><span class="sq-icon">🏊</span><div><div class="sq-name">Lake Geneva (Lausanne / Montreux)</div><div class="sq-note">The lakeside between Geneva and Bern is some of the finest scenery in Europe. The Lavaux vineyard terraces alone are worth slowing down for.</div></div></div>
+  </div>
+</div></div>
+
+<!-- STOP 4: INTERLAKEN -->
+<article class="stop-card">
+  <div class="stop-photo">
+    <img src="https://images.unsplash.com/photo-1578569516094-33063f8acb44?q=80&w=1770&auto=format&fit=crop" alt="Interlaken, Switzerland" loading="lazy">
+    <div class="stop-photo-overlay"></div><div class="stop-ghost-num">04</div>
+    <div class="stop-photo-tag">Stop 04 · Switzerland</div>
+  </div>
+  <div class="stop-body">
+    <h3>Interlaken, Switzerland</h3>
+    <p class="tagline">Between two lakes, beneath three peaks, at the point where Europe's scenery stops being subtle.</p>
+    <p class="desc">Interlaken sits between Lakes Thun and Brienz with the Eiger, Mönch, and Jungfrau rising behind it — a setting that feels like it was designed by someone who had run out of restraint. The Jungfraujoch railway climbs to 3,454 metres, which is the highest train station in Europe and a legitimate engineering marvel. In summer: hiking, paragliding, kayaking. In winter: some of the finest skiing in the Alps. The town itself is small and tourist-oriented but cheerfully so; the scenery around it is the destination.</p>
+    <div class="fact-chips">
+      <span class="chip gold">Jungfraujoch: 3,454 m by train</span><span class="chip">Between lakes Thun &amp; Brienz</span><span class="chip">Eiger north face nearby</span><span class="chip">Best: Jun–Sep, Dec–Mar</span><span class="chip">Don't miss: Jungfraujoch railway</span>
+    </div>
+  </div>
+</article>
+
+<!-- CONNECTOR 4→5: Interlaken to Venice -->
+<div class="connector"><div class="connector-inner">
+  <div class="transport-mode">🚆 Train · ~5–6 hr</div>
+  <div class="connector-drive"><span class="drive-time">~450 km southeast</span><span class="drive-detail">Interlaken → Milan → Venice Santa Lucia · change at Milan</span></div>
+  <div class="sq-label">Side Quests Along the Way</div>
+  <div class="sidequests">
+    <div class="sidequest"><span class="sq-icon">🏔️</span><div><div class="sq-name">Lugano, Switzerland</div><div class="sq-note">Italian-speaking Switzerland on a lake — a softer, warmer version of the Alps before crossing into Italy. An hour from Milan.</div></div></div>
+    <div class="sidequest"><span class="sq-icon">🍕</span><div><div class="sq-name">Milan, Italy</div><div class="sq-note">The mandatory connection point. The Duomo is extraordinary, the Last Supper requires advance booking, and dinner here is among the best in Italy.</div></div></div>
+    <div class="sidequest"><span class="sq-icon">🌊</span><div><div class="sq-name">Lake Como</div><div class="sq-note">An hour north of Milan and entirely worth the detour — steep wooded shores, Belle Époque villas, ferries between villages. Varenna over Bellagio for fewer crowds.</div></div></div>
+  </div>
+</div></div>
+
+<!-- STOP 5: VENICE -->
+<article class="stop-card">
+  <div class="stop-photo">
+    <img src="https://images.unsplash.com/photo-1498307833015-e7b400441eb8?q=80&w=1740&auto=format&fit=crop" alt="Venice, Italy" loading="lazy">
+    <div class="stop-photo-overlay"></div><div class="stop-ghost-num">05</div>
+    <div class="stop-photo-tag">Stop 05 · Italy</div>
+  </div>
+  <div class="stop-body">
+    <h3>Venice, Italy</h3>
+    <p class="tagline">A city built in the sea to survive its enemies, which outlasted them all, and is now slowly returning to the water.</p>
+    <p class="desc">Venice is genuinely unlike anywhere else — 118 islands connected by 400 bridges, no cars, no straight lines, and a navigational logic that defeats everyone on the first day. Walk away from St Mark's Square as quickly as possible into Dorsoduro and Castello, where the city belongs to its residents rather than its visitors. Take a vaporetto down the Grand Canal at dusk. Eat cicchetti at a bacaro. Stay at least two nights and accept that you will get lost, repeatedly, and that this is the correct outcome.</p>
+    <div class="fact-chips">
+      <span class="chip gold">118 islands, 400+ bridges</span><span class="chip">No cars within the city</span><span class="chip">Built from the 5th century AD</span><span class="chip">Best: Nov–Mar (fewer crowds)</span><span class="chip">Don't miss: Dorsoduro &amp; Castello</span>
+    </div>
+  </div>
+</article>
+
+<!-- CONNECTOR 5→6: Venice to Dubrovnik -->
+<div class="connector"><div class="connector-inner">
+  <div class="transport-mode">🚗 Drive or ferry · ~6 hr drive · overnight ferry available</div>
+  <div class="connector-drive"><span class="drive-time">~600 km southeast</span><span class="drive-detail">drive the Croatian coast via Trieste &amp; Split · or overnight ferry Venice → Split</span></div>
+  <div class="sq-label">Side Quests Along the Way</div>
+  <div class="sidequests">
+    <div class="sidequest"><span class="sq-icon">🏖️</span><div><div class="sq-name">Split, Croatia</div><div class="sq-note">Diocletian's Palace — a Roman emperor's retirement home, now a living neighbourhood of restaurants and bars inside ancient walls. A stop in its own right.</div></div></div>
+    <div class="sidequest"><span class="sq-icon">💧</span><div><div class="sq-name">Plitvice Lakes National Park</div><div class="sq-note">Sixteen terraced turquoise lakes connected by waterfalls in a forested canyon. Directly en route on the inland drive from Zagreb south toward Dubrovnik.</div></div></div>
+    <div class="sidequest"><span class="sq-icon">🏝️</span><div><div class="sq-name">Hvar Island</div><div class="sq-note">Croatia's most celebrated island — lavender fields, Venetian architecture, and clear Adriatic water. Ferry from Split.</div></div></div>
+  </div>
+</div></div>
+
+<!-- STOP 6: DUBROVNIK -->
+<article class="stop-card">
+  <div class="stop-photo">
+    <img src="https://images.unsplash.com/photo-1414862625453-d87604a607e4?q=80&w=1770&auto=format&fit=crop" alt="Dubrovnik, Croatia" loading="lazy">
+    <div class="stop-photo-overlay"></div><div class="stop-ghost-num">06</div>
+    <div class="stop-photo-tag">Stop 06 · Journey's End</div>
+  </div>
+  <div class="stop-body">
+    <h3>Dubrovnik, Croatia</h3>
+    <p class="tagline">A walled medieval city on an Adriatic cliff so photogenic they built a fantasy kingdom out of it.</p>
+    <p class="desc">Dubrovnik's old city is encircled by 13th-century walls that you can walk in their entirety — two kilometres, an hour, and one of the great urban experiences in Europe. The limestone streets inside are polished to a high shine by centuries of feet. The Adriatic below is the colour it is in photographs, which is to say improbably blue. Game of Thrones filmed here extensively, which brought crowds that are manageable in shoulder season and overwhelming in August. Come in May or October.</p>
+    <div class="fact-chips">
+      <span class="chip gold">City walls: 13th century · 2 km circuit</span><span class="chip">UNESCO World Heritage Site</span><span class="chip">Adriatic water temp: 25°C in Aug</span><span class="chip">Best: May–Jun, Sep–Oct</span><span class="chip">Don't miss: Walk the full city walls</span>
+    </div>
+  </div>
+</article>
+
+<section class="practical">
+  <div class="practical-inner">
+    <h2>Before you go.</h2>
+    <div class="practical-grid">
+      <div class="pcard"><div class="pcard-title">The Rail Question</div><p>An Interrail Global Pass covers all train legs on this route except the Eurostar (London–Brussels–Amsterdam), which requires a separate booking. Buy Eurostar tickets early — they sell out and prices rise sharply. Night trains exist on some legs and are worth considering for Venice.</p></div>
+      <div class="pcard"><div class="pcard-title">Venice to Dubrovnik</div><p>This is the one leg that doesn't have a clean direct train. Options: drive the Croatian coast (spectacular), take the overnight ferry from Venice to Split then bus or drive south, or fly. Most travelers who've done the whole route overland consider the coastal drive a highlight.</p></div>
+      <div class="pcard"><div class="pcard-title">When to Go</div><p>May–June and September–October are the sweet spots: good weather, manageable crowds, reasonable prices. July–August is hot, crowded, and expensive everywhere except London. Dubrovnik in August is genuinely overwhelming. Interlaken in winter is a different and equally valid trip.</p></div>
+      <div class="pcard"><div class="pcard-title">How Long</div><p>Two weeks is possible but leaves you wishing for more everywhere. Three weeks is comfortable. Four weeks lets you take the detours — Burgundy, Lake Como, Split, Plitvice — that make the route rather than just the stops. The Interrail pass rewards the longer version.</p></div>
+      <div class="pcard"><div class="pcard-title">Booking Ahead</div><p>The Anne Frank House in Amsterdam books out weeks in advance — do it first. The Jungfraujoch railway fills up in peak season. The Last Supper in Milan requires advance reservations. Everything else is walkable, but these three will cost you the trip if you leave them to chance.</p></div>
+      <div class="pcard"><div class="pcard-title">Crowds</div><p>This route passes through some of the most visited places in Europe. The difference between peak and shoulder season is not minor — it is the difference between a good trip and a great one. If you have any flexibility at all, avoid the school holidays.</p></div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="footer-wm">Roamer</div>
+  <div class="footer-sub">Daily Route Guides</div>
+</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  var stops = [
+    { name: "London, United Kingdom",  lat: 51.5074, lng: -0.1278 },
+    { name: "Amsterdam, Netherlands",  lat: 52.3676, lng:  4.9041 },
+    { name: "Paris, France",           lat: 48.8566, lng:  2.3522 },
+    { name: "Interlaken, Switzerland", lat: 46.6863, lng:  7.8632 },
+    { name: "Venice, Italy",           lat: 45.4408, lng: 12.3155 },
+    { name: "Dubrovnik, Croatia",      lat: 42.6507, lng: 18.0944 }
+  ];
+  var map = L.map('overview-map', { zoomControl: true, scrollWheelZoom: false, attributionControl: false });
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 14 }).addTo(map);
+  var latlngs = stops.map(function(s){ return [s.lat, s.lng]; });
+  var poly = L.polyline(latlngs, { color: '#a08040', weight: 2, opacity: 0.7, dashArray: '6,6' }).addTo(map);
+  var goldIcon = L.divIcon({ className: '', html: '<div style="width:9px;height:9px;background:#a08040;border-radius:50%;border:2px solid rgba(248,246,242,.75);box-shadow:0 0 7px rgba(160,128,64,.5)"></div>', iconSize: [9,9], iconAnchor: [4.5,4.5] });
+  stops.forEach(function(s, i) {
+    L.marker([s.lat, s.lng], { icon: goldIcon }).addTo(map)
+     .bindTooltip('<span style="font-family:Jost,sans-serif;font-size:12px;color:#f8f6f2;padding:4px 8px;display:block">' + (i+1) + '. ' + s.name + '</span>', { direction: 'right' });
+  });
+  map.fitBounds(poly.getBounds(), { padding: [28,28] });
+  var cards = document.querySelectorAll('.stop-card');
+  var io = new IntersectionObserver(function(entries) {
+    entries.forEach(function(e) { if (e.isIntersecting) e.target.classList.add('visible'); });
+  }, { threshold: 0.08 });
+  cards.forEach(function(c) { io.observe(c); });
+});
+</script>
+</body>
+</html>

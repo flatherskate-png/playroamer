@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gods and Ghats — Roamer Route Guide</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300;1,400&family=Jost:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --cream: #fdf6ee; --ink: #1c1208; --dusk: #2d1f0e;
+  --spice: #8b3a0f; --gold: #c49a3c; --fog: #a89880;
+}
+html { scroll-behavior: smooth; }
+body { background: var(--cream); color: var(--ink); font-family: 'Jost', sans-serif; font-weight: 300; overflow-x: hidden; }
+
+.hero { position: relative; height: 100vh; min-height: 600px; display: flex; flex-direction: column; justify-content: flex-end; overflow: hidden; }
+.hero-bg { position: absolute; inset: 0; background: url('https://images.unsplash.com/photo-1587474260584-136574528ed5?q=80&w=1770&auto=format&fit=crop') center 40% / cover no-repeat; animation: slowZoom 20s ease-in-out infinite alternate; }
+@keyframes slowZoom { from { transform: scale(1.0); } to { transform: scale(1.06); } }
+.hero-overlay { position: absolute; inset: 0; background: linear-gradient(to bottom, rgba(28,18,8,0.1) 0%, rgba(28,18,8,0.15) 40%, rgba(28,18,8,0.8) 72%, rgba(28,18,8,0.95) 100%); }
+.hero-content { position: relative; z-index: 2; padding: clamp(36px,5vw,72px) clamp(28px,6vw,80px); max-width: 820px; }
+.route-badge { display: inline-flex; align-items: center; gap: 10px; font-size: 0.68rem; font-weight: 500; letter-spacing: 0.2em; text-transform: uppercase; color: var(--gold); margin-bottom: 18px; }
+.route-badge::before { content: ''; display: block; width: 22px; height: 1px; background: var(--gold); }
+.hero h1 { font-family: 'Cormorant Garamond', serif; font-size: clamp(3.2rem, 8vw, 7rem); font-weight: 300; line-height: 0.9; color: var(--cream); letter-spacing: -0.01em; margin-bottom: 28px; }
+.hero h1 em { font-style: italic; color: rgba(253,246,238,0.55); }
+.hero-meta { display: flex; gap: 32px; flex-wrap: wrap; }
+.hero-stat { display: flex; flex-direction: column; gap: 3px; }
+.hero-stat .num { font-family: 'Cormorant Garamond', serif; font-size: 1.85rem; font-weight: 300; color: var(--cream); line-height: 1; }
+.hero-stat .lbl { font-size: 0.65rem; font-weight: 500; letter-spacing: 0.15em; text-transform: uppercase; color: var(--fog); }
+.scroll-cue { position: absolute; bottom: 32px; right: clamp(28px,6vw,80px); z-index: 2; display: flex; flex-direction: column; align-items: center; gap: 8px; color: rgba(253,246,238,0.38); font-size: 0.62rem; letter-spacing: 0.15em; text-transform: uppercase; animation: fadeIn 2s 1.2s both; }
+.scroll-cue .drip { width: 1px; height: 44px; background: linear-gradient(to bottom, transparent, rgba(253,246,238,0.38)); animation: drip 2.4s 1.4s ease-in-out infinite; }
+@keyframes drip { 0%,100% { transform: scaleY(1); opacity: 0.4; } 55% { transform: scaleY(1.35); opacity: 0.9; } }
+@keyframes fadeIn { from { opacity:0; } to { opacity:1; } }
+
+.intro { max-width: 740px; margin: 80px auto 0; padding: 0 clamp(24px,5vw,60px); }
+.intro p { font-family: 'Cormorant Garamond', serif; font-size: clamp(1.3rem, 2.6vw, 1.75rem); font-weight: 300; line-height: 1.68; color: #3d2a18; }
+.intro p strong { font-weight: 400; color: var(--spice); }
+
+.map-section { margin: 64px auto; max-width: 980px; padding: 0 clamp(24px,5vw,60px); }
+.eyebrow { font-size: 0.66rem; font-weight: 500; letter-spacing: 0.2em; text-transform: uppercase; color: var(--fog); margin-bottom: 14px; display: flex; align-items: center; gap: 12px; }
+.eyebrow::after { content: ''; flex: 1; height: 1px; background: linear-gradient(to right, rgba(168,152,128,0.35), transparent); }
+#overview-map { width: 100%; height: 340px; border-radius: 3px; overflow: hidden; border: 1px solid rgba(45,31,14,0.1); }
+
+.stops-heading { max-width: 980px; margin: 0 auto 52px; padding: 0 clamp(24px,5vw,60px); }
+.stops-heading h2 { font-family: 'Cormorant Garamond', serif; font-size: clamp(2rem,4vw,2.9rem); font-weight: 300; color: var(--dusk); line-height: 1.1; }
+
+.stop-card { max-width: 980px; margin: 0 auto; padding: 0 clamp(24px,5vw,60px); opacity: 0; transform: translateY(20px); transition: opacity 0.65s ease, transform 0.65s ease; }
+.stop-card.visible { opacity: 1; transform: none; }
+.stop-photo { position: relative; width: 100%; height: clamp(240px, 40vw, 460px); overflow: hidden; border-radius: 3px 3px 0 0; }
+.stop-photo img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform 0.7s ease; }
+.stop-card:hover .stop-photo img { transform: scale(1.03); }
+.stop-photo-overlay { position: absolute; inset: 0; background: linear-gradient(to bottom, rgba(28,18,8,0) 45%, rgba(28,18,8,0.55) 100%); pointer-events: none; }
+.stop-ghost-num { position: absolute; top: 14px; right: 20px; font-family: 'Cormorant Garamond', serif; font-size: clamp(3.2rem,7vw,5.5rem); font-weight: 300; color: rgba(253,246,238,0.48); line-height: 1; pointer-events: none; z-index: 2; letter-spacing: -0.02em; }
+.stop-photo-tag { position: absolute; bottom: 16px; left: 20px; font-size: 0.63rem; font-weight: 600; letter-spacing: 0.2em; text-transform: uppercase; color: var(--gold); z-index: 2; }
+.stop-body { background: var(--dusk); padding: clamp(26px,3.5vw,44px) clamp(22px,4vw,48px); border-radius: 0 0 3px 3px; }
+.stop-body h3 { font-family: 'Cormorant Garamond', serif; font-size: clamp(1.65rem,3.2vw,2.3rem); font-weight: 300; color: var(--cream); line-height: 1.12; margin-bottom: 12px; }
+.stop-body .tagline { font-family: 'Cormorant Garamond', serif; font-style: italic; font-size: 1.03rem; color: rgba(253,246,238,0.46); line-height: 1.55; margin-bottom: 16px; }
+.stop-body p.desc { font-size: 0.87rem; line-height: 1.8; color: rgba(253,246,238,0.66); font-weight: 300; margin-bottom: 22px; max-width: 72ch; }
+.fact-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { font-size: 0.69rem; font-weight: 400; letter-spacing: 0.05em; color: var(--fog); border: 1px solid rgba(168,152,128,0.25); padding: 5px 12px; border-radius: 100px; background: rgba(168,152,128,0.06); }
+.chip.gold { color: var(--gold); border-color: rgba(196,154,60,0.3); background: rgba(196,154,60,0.07); }
+
+.connector { max-width: 980px; margin: 0 auto; padding: 0 clamp(24px,5vw,60px); }
+.connector-inner { border-left: 1px solid rgba(196,154,60,0.28); margin-left: 10px; padding: 30px 0 30px 32px; position: relative; }
+.connector-inner::before { content: ''; position: absolute; top: 30px; left: -5px; width: 9px; height: 9px; border-radius: 50%; background: var(--gold); box-shadow: 0 0 8px rgba(196,154,60,0.4); }
+.connector-inner::after { content: ''; position: absolute; bottom: 30px; left: -5px; width: 9px; height: 9px; border-radius: 50%; background: rgba(196,154,60,0.3); border: 1px solid var(--gold); }
+.connector-drive { display: flex; align-items: baseline; gap: 10px; margin-bottom: 20px; }
+.drive-time { font-family: 'Cormorant Garamond', serif; font-size: 1.3rem; font-weight: 300; color: var(--dusk); line-height: 1; }
+.drive-detail { font-size: 0.71rem; color: var(--fog); letter-spacing: 0.06em; }
+.sq-label { font-size: 0.62rem; font-weight: 600; letter-spacing: 0.2em; text-transform: uppercase; color: var(--spice); margin-bottom: 12px; }
+.sidequests { display: flex; flex-wrap: wrap; gap: 10px; }
+.sidequest { display: flex; align-items: flex-start; gap: 10px; background: #f5ebe0; border: 1px solid rgba(139,58,15,0.13); border-radius: 3px; padding: 10px 14px; width: clamp(200px, 28%, 260px); }
+.sq-icon { font-size: 1rem; line-height: 1; margin-top: 1px; flex-shrink: 0; }
+.sq-name { font-size: 0.79rem; font-weight: 500; color: var(--ink); line-height: 1.25; margin-bottom: 3px; }
+.sq-note { font-size: 0.69rem; color: #7a4a2a; font-weight: 300; line-height: 1.45; }
+
+.curator-note { display: flex; align-items: flex-start; gap: 10px; background: rgba(224,123,42,0.07); border: 1px solid rgba(224,123,42,0.22); border-radius: 3px; padding: 12px 16px; margin-top: 14px; font-size: 0.75rem; color: #7a4a1a; line-height: 1.55; font-style: italic; }
+.curator-note::before { content: 'Note: '; font-style: normal; font-weight: 600; flex-shrink: 0; }
+
+.practical { background: var(--dusk); padding: 72px clamp(24px,6vw,80px); margin-top: 72px; }
+.practical-inner { max-width: 980px; margin: 0 auto; }
+.practical h2 { font-family: 'Cormorant Garamond', serif; font-size: clamp(2rem,4vw,2.8rem); font-weight: 300; color: var(--cream); margin-bottom: 48px; line-height: 1.1; }
+.practical-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px,1fr)); gap: 32px; }
+.pcard { border-left: 1px solid rgba(196,154,60,0.3); padding-left: 20px; }
+.pcard-title { font-size: 0.67rem; font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase; color: var(--gold); margin-bottom: 10px; }
+.pcard p { font-size: 0.86rem; line-height: 1.75; color: rgba(253,246,238,0.62); font-weight: 300; }
+
+footer { background: var(--ink); padding: 36px; text-align: center; }
+.footer-wm { font-family: 'Cormorant Garamond', serif; font-size: 1.35rem; font-weight: 300; color: rgba(253,246,238,0.3); letter-spacing: 0.1em; margin-bottom: 6px; }
+.footer-sub { font-size: 0.65rem; letter-spacing: 0.14em; text-transform: uppercase; color: rgba(253,246,238,0.15); }
+
+.leaflet-tooltip { background: #2d1f0e !important; border: 1px solid rgba(196,154,60,0.3) !important; box-shadow: none !important; border-radius: 2px !important; padding: 0 !important; }
+.leaflet-tooltip::before { display: none !important; }
+@media (max-width: 560px) { .sidequest { width: 100%; } .hero-meta { gap: 20px; } }
+</style>
+</head>
+<body>
+
+<section class="hero">
+  <div class="hero-bg"></div>
+  <div class="hero-overlay"></div>
+  <div class="hero-content">
+    <div class="route-badge">Roamer Route Guide</div>
+    <h1>Gods<br><em>&amp; Ghats</em></h1>
+    <div class="hero-meta">
+      <div class="hero-stat"><span class="num">~2,000</span><span class="lbl">Kilometres</span></div>
+      <div class="hero-stat"><span class="num">6</span><span class="lbl">Stops</span></div>
+      <div class="hero-stat"><span class="num">3–4</span><span class="lbl">Weeks Recommended</span></div>
+      <div class="hero-stat"><span class="num">2</span><span class="lbl">Countries</span></div>
+    </div>
+  </div>
+  <div class="scroll-cue"><div class="drip"></div>Scroll</div>
+</section>
+
+<section class="intro">
+  <p>India does not ease you in. It arrives all at once — <strong>the smell, the noise, the colour, the scale</strong> — and asks you to recalibrate everything you thought you knew about how a city moves. This route traces the old Mughal heartland from Delhi's chaos to Kathmandu's thin mountain air, through pink cities, marble mausoleums, sacred rivers, and labyrinthine old towns that predate every empire that tried to claim them.</p>
+</section>
+
+<section class="map-section">
+  <div class="eyebrow">The Route</div>
+  <div id="overview-map"></div>
+</section>
+
+<div class="stops-heading">
+  <h2>Six stops.<br>Two countries. Countless lifetimes.</h2>
+</div>
+
+<article class="stop-card">
+  <div class="stop-photo">
+    <img src="https://images.unsplash.com/photo-1587474260584-136574528ed5?q=80&w=1770&auto=format&fit=crop" alt="Delhi, India" loading="lazy">
+    <div class="stop-photo-overlay"></div><div class="stop-ghost-num">01</div>
+    <div class="stop-photo-tag">Stop 01 · Gateway</div>
+  </div>
+  <div class="stop-body">
+    <h3>Delhi, India</h3>
+    <p class="tagline">Eight cities built on top of each other, and all of them are still arguing.</p>
+    <p class="desc">Delhi is not one place but a palimpsest — Mughal mosques beside colonial boulevards beside gleaming metro stations beside crumbling medieval walls. Old Delhi's lanes around Chandni Chowk are among the most sensory-overwhelming streets on earth. New Delhi's wide Lutyens avenues feel like a different country entirely. Give yourself three days minimum: one for old, one for new, one for recovery.</p>
+    <div class="fact-chips">
+      <span class="chip gold">Population 32 million+</span><span class="chip">Capital of India</span><span class="chip">Old quarters: 17th century</span><span class="chip">Best: Oct–Mar</span><span class="chip">Don't miss: Chandni Chowk at dawn</span>
+    </div>
+  </div>
+</article>
+
+<div class="connector"><div class="connector-inner">
+  <div class="connector-drive"><span class="drive-time">~5 hr southwest</span><span class="drive-detail">~280 km · NH 48 or train</span></div>
+  <div class="sq-label">Side Quests Along the Way</div>
+  <div class="sidequests">
+    <div class="sidequest"><span class="sq-icon">🐯</span><div><div class="sq-name">Sariska Tiger Reserve</div><div class="sq-note">Bengal tiger territory on the Delhi–Jaipur highway. Morning jeep safaris run year-round.</div></div></div>
+    <div class="sidequest"><span class="sq-icon">🏺</span><div><div class="sq-name">Neemrana Fort Palace</div><div class="sq-note">A 15th-century fort converted to a heritage hotel. Even a lunch stop earns extraordinary views — directly on NH 48.</div></div></div>
+  </div>
+</div></div>
+
+<article class="stop-card">
+  <div class="stop-photo">
+    <img src="https://images.unsplash.com/photo-1603262110263-fb0112e7cc33?q=80&w=1771&auto=format&fit=crop" alt="Jaipur, Rajasthan" loading="lazy">
+    <div class="stop-photo-overlay"></div><div class="stop-ghost-num">02</div>
+    <div class="stop-photo-tag">Stop 02 · Rajasthan</div>
+  </div>
+  <div class="stop-body">
+    <h3>Jaipur, Rajasthan</h3>
+    <p class="tagline">A city painted pink by royal decree in 1876. It has not reconsidered.</p>
+    <p class="desc">The Pink City earns its nickname — the old walled quarter is genuinely, uniformly terracotta-rose, a colour chosen by Maharaja Ram Singh II to welcome the Prince of Wales. The Amber Fort sits on a ridge above the city and requires a full morning. The Hawa Mahal's 953-windowed facade is best seen at sunrise before the tuk-tuks arrive. The bazaars sell textiles, gems, and blue pottery; buy something. You'll wish you had.</p>
+    <div class="fact-chips">
+      <span class="chip gold">Amber Fort: 16th century</span><span class="chip">Hawa Mahal: 953 windows</span><span class="chip">UNESCO World Heritage City</span><span class="chip">Best: Nov–Feb</span><span class="chip">Don't miss: Amber Fort at dawn</span>
+    </div>
+  </div>
+</article>
+
+<div class="connector"><div class="connector-inner">
+  <div class="connector-drive"><span class="drive-time">~4 hr northeast</span><span class="drive-detail">~240 km · NH 21 or train</span></div>
+  <div class="sq-label">Side Quests Along the Way</div>
+  <div class="sidequests">
+    <div class="sidequest"><span class="sq-icon">🦅</span><div><div class="sq-name">Keoladeo National Park</div><div class="sq-note">One of the world's great bird sanctuaries — 370+ species. Bharatpur sits directly on the Jaipur–Agra road.</div></div></div>
+    <div class="sidequest"><span class="sq-icon">🕌</span><div><div class="sq-name">Fatehpur Sikri</div><div class="sq-note">Akbar's ghost capital, abandoned after 14 years. ~40 km west of Agra and directly on this route.</div></div></div>
+  </div>
+  <div class="curator-note">This leg heads northeast — a deliberate backtrack before the route resumes eastward. This is the standard Golden Triangle loop and is intentional, but worth acknowledging so travelers understand the geometry.</div>
+</div></div>
+
+<article class="stop-card">
+  <div class="stop-photo">
+    <img src="https://images.unsplash.com/photo-1548013146-72479768bada?q=80&w=1548&auto=format&fit=crop" alt="Agra, India" loading="lazy">
+    <div class="stop-photo-overlay"></div><div class="stop-ghost-num">03</div>
+    <div class="stop-photo-tag">Stop 03 · Uttar Pradesh</div>
+  </div>
+  <div class="stop-body">
+    <h3>Agra, India</h3>
+    <p class="tagline">You have seen ten thousand photographs of it. None of them prepared you.</p>
+    <p class="desc">The Taj Mahal is not overrated. This is worth saying clearly, because nothing that famous is supposed to be this good. Shah Jahan built it as a tomb for his wife Mumtaz Mahal, who died in 1631 during the birth of their fourteenth child. It took 22 years and 20,000 workers. See it at sunrise. See it again at sunset if you can. Agra Fort — a few kilometres away — is also extraordinary and receives a fraction of the crowds.</p>
+    <div class="fact-chips">
+      <span class="chip gold">Taj Mahal: built 1632–1653</span><span class="chip">UNESCO World Heritage Site</span><span class="chip">20,000 workers, 22 years</span><span class="chip">Best visited: sunrise</span><span class="chip">Don't miss: Agra Fort</span>
+    </div>
+  </div>
+</article>
+
+<div class="connector"><div class="connector-inner">
+  <div class="connector-drive"><span class="drive-time">~4 hr east</span><span class="drive-detail">~340 km · Agra–Lucknow Expressway</span></div>
+  <div class="sq-label">Side Quests Along the Way</div>
+  <div class="sidequests">
+    <div class="sidequest"><span class="sq-icon">🕉️</span><div><div class="sq-name">Prayagraj (Allahabad)</div><div class="sq-note">The Triveni Sangam — confluence of the Ganges, Yamuna, and mythical Saraswati. One of Hinduism's holiest sites.</div></div></div>
+  </div>
+  <div class="curator-note">This is a fast expressway leg with limited classic tourist stops en route. Prayagraj may require a short detour. A human curator may know lesser-documented stops worth adding here.</div>
+</div></div>
+
+<article class="stop-card">
+  <div class="stop-photo">
+    <img src="https://images.unsplash.com/photo-1601752874509-0e350467dc7b?q=80&w=1770&auto=format&fit=crop" alt="Bara Imambara, Lucknow" loading="lazy">
+    <div class="stop-photo-overlay"></div><div class="stop-ghost-num">04</div>
+    <div class="stop-photo-tag">Stop 04 · City of Nawabs</div>
+  </div>
+  <div class="stop-body">
+    <h3>Lucknow, India</h3>
+    <p class="tagline">The city that turned refinement into an art form and never stopped.</p>
+    <p class="desc">Lucknow was the capital of the Nawabs of Awadh — a court culture so devoted to etiquette, cuisine, and the arts that it persists visibly today. The Bara Imambara is an 18th-century mosque complex with a labyrinthine upper floor — the bhul-bhulaiya, a genuine maze — that is disorienting and wonderful. The old Chowk bazaar sells chikankari embroidery produced here for centuries. The food is a destination in itself: Lucknow's biryani and kakori kebabs are among the finest in northern India.</p>
+    <div class="fact-chips">
+      <span class="chip gold">Bara Imambara: built 1784</span><span class="chip">Chikankari embroidery capital</span><span class="chip">Population 3.5 million</span><span class="chip">Best: Oct–Mar</span><span class="chip">Don't miss: Bhul-bhulaiya maze</span>
+    </div>
+  </div>
+</article>
+
+<div class="connector"><div class="connector-inner">
+  <div class="connector-drive"><span class="drive-time">~5 hr east</span><span class="drive-detail">~300 km · NH 30 or train</span></div>
+  <div class="sq-label">Side Quests Along the Way</div>
+  <div class="sidequests">
+    <div class="sidequest"><span class="sq-icon">🏛️</span><div><div class="sq-name">Prayagraj (Allahabad)</div><div class="sq-note">If skipped on the previous leg: the Triveni Sangam confluence is worth a boat ride at dawn.</div></div></div>
+  </div>
+</div></div>
+
+<article class="stop-card">
+  <div class="stop-photo">
+    <img src="https://images.unsplash.com/photo-1613445607898-f46e51645acf?q=80&w=1770&auto=format&fit=crop" alt="Varanasi, India" loading="lazy">
+    <div class="stop-photo-overlay"></div><div class="stop-ghost-num">05</div>
+    <div class="stop-photo-tag">Stop 05 · The Eternal City</div>
+  </div>
+  <div class="stop-body">
+    <h3>Varanasi, Uttar Pradesh</h3>
+    <p class="tagline">One of the oldest continuously inhabited cities on earth. It has seen everything and is surprised by nothing.</p>
+    <p class="desc">Varanasi is where Hindus come to die — and to be reborn, and to bathe, and to pray, and to burn incense, and to argue philosophy. The ghats are stone steps descending to the Ganges, and at dawn the river fills with pilgrims, priests, boats, smoke, flowers, and an atmosphere impossible to describe and unforgettable to witness. The evening Ganga Aarti fire ceremony at Dashashwamedh Ghat is one of the great spectacles of the subcontinent. Sarnath — where the Buddha gave his first sermon — is just 13 km away and an easy half-day.</p>
+    <div class="fact-chips">
+      <span class="chip gold">Inhabited 3,000+ years</span><span class="chip">84 ghats along the Ganges</span><span class="chip">Holiest city in Hinduism</span><span class="chip">Best: Oct–Mar</span><span class="chip">Don't miss: Dawn boat on the Ganges</span>
+    </div>
+  </div>
+</article>
+
+<div class="connector"><div class="connector-inner">
+  <div class="connector-drive"><span class="drive-time">~12–14 hr northeast</span><span class="drive-detail">~650 km via Gorakhpur &amp; Sunauli border · or fly (~1.5 hr)</span></div>
+  <div class="sq-label">Side Quests Along the Way</div>
+  <div class="sidequests">
+    <div class="sidequest"><span class="sq-icon">☸️</span><div><div class="sq-name">Lumbini, Nepal</div><div class="sq-note">The birthplace of the Buddha, just across the Nepal border. A UNESCO site and one of Buddhism's four holiest places.</div></div></div>
+    <div class="sidequest"><span class="sq-icon">🐘</span><div><div class="sq-name">Chitwan National Park</div><div class="sq-note">One-horned rhinos, Bengal tigers, elephant safaris. Adds 1–2 days but worth the detour south of Kathmandu.</div></div></div>
+  </div>
+  <div class="curator-note">Most travelers fly this leg — overland is long and exhausting. Lumbini requires a deliberate southwest detour from the main highway; Chitwan is a significant side trip. Both are worth flagging as deliberate add-ons rather than casual detours.</div>
+</div></div>
+
+<article class="stop-card">
+  <div class="stop-photo">
+    <img src="https://images.unsplash.com/photo-1617469165786-8007eda3caa7?q=80&w=1548&auto=format&fit=crop" alt="Kathmandu, Nepal" loading="lazy">
+    <div class="stop-photo-overlay"></div><div class="stop-ghost-num">06</div>
+    <div class="stop-photo-tag">Stop 06 · Journey's End</div>
+  </div>
+  <div class="stop-body">
+    <h3>Kathmandu, Nepal</h3>
+    <p class="tagline">The air is thinner here. So is the boundary between the everyday and the sacred.</p>
+    <p class="desc">Kathmandu sits in a valley ringed by Himalayan peaks and filled with temples, stupas, and alleyways that smell of incense and marigolds. Pashupatinath — the holiest Hindu temple in Nepal — sits on the Bagmati River and hosts cremations on its ghats, a more intimate echo of Varanasi. Swayambhunath, the Monkey Temple, watches the city from a forested hill. Thamel is chaotic and touristy and useful; the old city of Patan across the river is quieter and more beautiful.</p>
+    <div class="fact-chips">
+      <span class="chip gold">Elevation: 1,400 m</span><span class="chip">7 UNESCO sites in valley</span><span class="chip">Population 1.5 million</span><span class="chip">Best: Oct–Nov, Mar–Apr</span><span class="chip">Don't miss: Patan Durbar Square</span>
+    </div>
+  </div>
+</article>
+
+<section class="practical">
+  <div class="practical-inner">
+    <h2>Before you go.</h2>
+    <div class="practical-grid">
+      <div class="pcard"><div class="pcard-title">When to Go</div><p>October through March is the window. The monsoon runs June–September and makes road travel miserable. November and February are sweet spots — cool, clear, manageable crowds. Delhi in May reaches 45°C; this is not a summer trip.</p></div>
+      <div class="pcard"><div class="pcard-title">Getting Around</div><p>Indian Railways is excellent between major cities and vastly preferable to road for long legs. Book AC 2-tier or 3-tier sleeper for overnight journeys. Hire a driver for day trips — worth every rupee. For Varanasi to Kathmandu, flying is strongly recommended.</p></div>
+      <div class="pcard"><div class="pcard-title">The Golden Triangle</div><p>Delhi–Jaipur–Agra is a loop, not a line. Jaipur is southwest of Delhi; Agra is southeast. The route backtracks northeast from Jaipur to Agra before heading east again. Standard and expected — just don't read it as a straight line.</p></div>
+      <div class="pcard"><div class="pcard-title">Visas</div><p>India e-visas are available online for most nationalities — allow 2–4 business days. Nepal visa on arrival at Tribhuvan Airport and the Sunauli land border. Keep separate USD cash for the Nepal visa fee.</p></div>
+      <div class="pcard"><div class="pcard-title">The Pace Question</div><p>India has a way of consuming days you were sure you had. Three weeks is the minimum for this route done properly; four is comfortable. Varanasi alone will steal two days if you let it — which you should.</p></div>
+      <div class="pcard"><div class="pcard-title">What to Expect</div><p>Sensory overload is not a side effect — it is the experience. The noise, the colour, the chaos of traffic and vendors and pilgrims are not obstacles between you and India; they are India. Lean in rather than away.</p></div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="footer-wm">Roamer</div>
+  <div class="footer-sub">Daily Route Guides</div>
+</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  var stops = [
+    { name: "Delhi, India",     lat: 28.6139, lng: 77.2090 },
+    { name: "Jaipur, India",    lat: 26.9124, lng: 75.7873 },
+    { name: "Agra, India",      lat: 27.1767, lng: 78.0081 },
+    { name: "Lucknow, India",   lat: 26.8691, lng: 80.9124 },
+    { name: "Varanasi, India",  lat: 25.3176, lng: 83.0068 },
+    { name: "Kathmandu, Nepal", lat: 27.7172, lng: 85.3240 }
+  ];
+  var map = L.map('overview-map', { zoomControl: true, scrollWheelZoom: false, attributionControl: false });
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 14 }).addTo(map);
+  var latlngs = stops.map(function(s){ return [s.lat, s.lng]; });
+  var poly = L.polyline(latlngs, { color: '#c49a3c', weight: 2, opacity: 0.7, dashArray: '6,6' }).addTo(map);
+  var goldIcon = L.divIcon({ className: '', html: '<div style="width:9px;height:9px;background:#c49a3c;border-radius:50%;border:2px solid rgba(253,246,238,.75);box-shadow:0 0 7px rgba(196,154,60,.5)"></div>', iconSize: [9,9], iconAnchor: [4.5,4.5] });
+  stops.forEach(function(s, i) {
+    L.marker([s.lat, s.lng], { icon: goldIcon }).addTo(map)
+     .bindTooltip('<span style="font-family:Jost,sans-serif;font-size:12px;color:#fdf6ee;padding:4px 8px;display:block">' + (i+1) + '. ' + s.name + '</span>', { direction: 'right' });
+  });
+  map.fitBounds(poly.getBounds(), { padding: [28,28] });
+  var cards = document.querySelectorAll('.stop-card');
+  var io = new IntersectionObserver(function(entries) {
+    entries.forEach(function(e) { if (e.isIntersecting) e.target.classList.add('visible'); });
+  }, { threshold: 0.08 });
+  cards.forEach(function(c) { io.observe(c); });
+});
+</script>
+</body>
+</html>
