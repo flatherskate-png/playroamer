@@ -403,8 +403,19 @@ function initLeafletMap() {
   if (!el || !window.L) return;
   const stops = revealData.stops;
   const wrapping = isWrappingRoute(currentRoute);
-  const map = L.map(el, { zoomControl: true, scrollWheelZoom: false, doubleClickZoom: false, touchZoom: true, worldCopyJump: wrapping });
+  const map = L.map(el, {
+    zoomControl: false,
+    scrollWheelZoom: false,
+    doubleClickZoom: false,
+    touchZoom: false,
+    dragging: false,
+    worldCopyJump: wrapping,
+  });
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 18 }).addTo(map);
+
+  // Map click triggers the explore action (same as btn-explore)
+  map.on('click', () => document.getElementById('btn-explore')?.click());
+  el.style.cursor = 'pointer';
 
   // Correctness comes from the final guess's feedback (server is the truth)
   const finalFeedback = guessHistory.length > 0 ? guessHistory[guessHistory.length - 1].feedback : {};
@@ -1390,16 +1401,27 @@ function render() {
         <div class="drc-emoji-row-single">${emojiBlocksHTML}</div>
       </div>
 
-      <!-- 3 CTA pill buttons above map -->
+      <!-- Primary CTAs: Share + Play -->
       <div class="drc-cta-bar">
         <button class="drc-cta-btn drc-cta-share" id="btn-copy">Share results</button>
         <button class="drc-cta-btn drc-cta-play" id="btn-menu">Play another route</button>
-        <button class="drc-cta-btn drc-cta-explore" id="btn-explore">Explore this route</button>
       </div>
 
-      <!-- Map — flex:1, fills remaining space -->
-      <div class="drc-map-flex">
+      <!-- Explore invitation — sits above map, acts as button -->
+      <button class="drc-explore-label" id="btn-explore">
+        <span class="drc-explore-label-dot"></span>
+        Explore this route
+        <span class="drc-explore-label-arrow">→</span>
+      </button>
+
+      <!-- Map — clickable, no zoom controls -->
+      <div class="drc-map-flex" id="drc-map-wrap">
         <div id="leaflet-map"></div>
+      </div>
+
+      <!-- Decoy footnote -->
+      <div class="drc-decoy-footnote">
+        Decoys: ${revealData.decoy_names.join(' · ')}
       </div>
 
     </div>
@@ -1413,6 +1435,10 @@ function render() {
         loading="lazy"
         title="Route guide"
       ></iframe>
+      <div class="drc-below-footer">
+        <button class="drc-below-footer-btn" id="btn-back-to-results-2">↑ Back to results</button>
+        <button class="drc-below-footer-btn drc-below-footer-btn-play" id="btn-play-another">Play another route</button>
+      </div>
     </div>`;
   }
 
@@ -1684,28 +1710,59 @@ function render() {
   // Events
   document.getElementById("btn-retry")?.addEventListener("click",  () => startGame(currentRoute, playSource));
   document.getElementById("btn-menu")?.addEventListener("click",   goBack);
-  document.getElementById("btn-explore")?.addEventListener("click", () => {
-    // Derive itinerary URL: prefer route.explore_url, fallback to slug pattern
+  const _doExplore = () => {
     const exploreUrl = currentRoute.explore_url
       || `${currentRoute.id}-itinerary.html`;
     const isDesktop = !isMobile();
     if (isDesktop) {
       window.open(exploreUrl, '_blank', 'noopener');
     } else {
-      // Reveal the below-fold iframe and scroll into it
       const overlay = document.getElementById('game-overlay');
       const below   = document.getElementById('drc-below-fold');
       const frame   = document.getElementById('drc-itinerary-frame');
       if (!below || !frame) return;
-      overlay.classList.remove('revealed');
-      overlay.style.overflowY = 'auto';
+
+      overlay.classList.add('jrn-open');
       below.style.display = 'block';
+
+      // Fixed pill appended directly to game-overlay
+      if (!document.getElementById('drc-back-bar')) {
+        const bar = document.createElement('div');
+        bar.id = 'drc-back-bar';
+        bar.className = 'drc-back-bar';
+        bar.innerHTML = '<button class="drc-back-bar-btn">← Back to results</button>';
+        overlay.appendChild(bar);
+        bar.querySelector('button').addEventListener('click', () => {
+          overlay.scrollTo({ top: 0, behavior: 'smooth' });
+          setTimeout(() => {
+            bar.remove();
+            overlay.classList.remove('jrn-open');
+            below.style.display = 'none';
+          }, 400);
+        });
+      }
+
       if (!frame.src || frame.src === window.location.href) {
         frame.src = exploreUrl;
       }
       requestAnimationFrame(() => below.scrollIntoView({ behavior: 'smooth' }));
     }
+  };
+
+  document.getElementById("btn-explore")?.addEventListener("click", _doExplore);
+  document.getElementById("drc-map-wrap")?.addEventListener("click", _doExplore);
+
+  document.getElementById("btn-back-to-results-2")?.addEventListener("click", () => {
+    const overlay = document.getElementById('game-overlay');
+    const below   = document.getElementById('drc-below-fold');
+    overlay?.scrollTo({ top: 0, behavior: 'smooth' });
+    setTimeout(() => {
+      document.getElementById('drc-back-bar')?.remove();
+      overlay?.classList.remove('jrn-open');
+      if (below) below.style.display = 'none';
+    }, 400);
   });
+  document.getElementById("btn-play-another")?.addEventListener("click", goBack);
   document.getElementById("btn-copy")?.addEventListener("click",   function() {
     const shareEmoji = guessHistory.map(gh =>
       Array.from({ length: currentRoute.stop_count }, (_, i) => {
@@ -1885,10 +1942,13 @@ function closeOverlay() {
 }
 function goBack() {
   selectedCard = null;
+  revealed = false;
+  screen = 'play';
   if (leafletMap) { leafletMap.remove(); leafletMap = null; }
   const floatWrap = document.getElementById('floating-submit');
   if (floatWrap) floatWrap.classList.remove('visible');
   document.getElementById('nav-sub-line')?.remove();
+  document.getElementById('drc-back-bar')?.remove();
   document.querySelectorAll('.nav-brand .nav-divider, .nav-brand .nav-route-name').forEach(el => el.remove());
   if (playSource === 'core') { screen = 'core'; render(); }
   else if (playSource === 'winter') { screen = 'winter'; render(); }
