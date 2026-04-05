@@ -1933,6 +1933,14 @@ function openOverlay() {
   overlay.scrollTop = 0;
   overlay.style.animation = 'none';
   requestAnimationFrame(() => { overlay.style.animation = ''; });
+
+  // Request fullscreen on mobile to hide URL bar (must be inside a user gesture)
+  const el = document.documentElement;
+  if (el.requestFullscreen) {
+    el.requestFullscreen().catch(() => {});
+  } else if (el.webkitRequestFullscreen) {
+    el.webkitRequestFullscreen();
+  }
 }
 function closeOverlay() {
   const overlay = document.getElementById('game-overlay');
