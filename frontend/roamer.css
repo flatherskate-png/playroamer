@@ -34,7 +34,7 @@ body {
   background: var(--bg);
   color: var(--text);
   font-family: 'DM Sans', sans-serif;
-  min-height: 100dvh;
+  min-height: 100vh;
   overflow-x: hidden;
   background-image:
     radial-gradient(ellipse 60% 50% at 10% 15%, rgba(125,211,252,0.05) 0%, transparent 60%),
@@ -47,16 +47,16 @@ body {
    ═══════════════════════════════════════════════════════ */
 
 #globe-canvas {
-  position: fixed;
+  position: absolute;
   top: 0; right: -8vw;
-  width: 72vw; height: 100dvh;
+  width: 72vw; height: 100%;
   opacity: 0.38;
   pointer-events: none;
   z-index: 0;
 }
 
 .bg-lights {
-  position: fixed;
+  position: absolute;
   inset: 0;
   pointer-events: none;
   z-index: 0;
@@ -89,6 +89,7 @@ body {
   display: flex;
   flex-direction: column;
   padding: clamp(24px, 4vw, 48px) clamp(24px, 6vw, 80px);
+  overflow: hidden;
 }
 
 .brand-row {
@@ -981,7 +982,7 @@ body {
 .lb-img-inner img {
   display: block;
   max-width: min(100%, calc(100vw - 32px));
-  max-height: calc(100dvh - 140px);
+  max-height: calc(100vh - 140px);
   object-fit: contain; border-radius: 0; width: auto; height: auto;
 }
 .lb-badge {
@@ -1762,7 +1763,7 @@ body {
 }
 #drc-itinerary-frame {
   width: 100%;
-  height: 100dvh;
+  height: 100vh;
   border: none;
   display: block;
 }
