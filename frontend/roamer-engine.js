@@ -136,8 +136,9 @@ function startGame(r, source) {
   cards            = shuffle([...r.photos]);
   gridOrder        = cards.map(c => c.id);
   assignments      = {};
-  selectedCard     = null;
   mobileFeaturedName = null;
+  // Auto-arm the first card so the "tap a pin" hint shows immediately
+  selectedCard     = cards[0] ?? null;
   userFlaggedDecoys  = new Set();
   revealed         = false;
   revealData       = null;
@@ -210,16 +211,14 @@ function advanceMobileFeatured(placedId) {
   console.log('[advance] sequence:', sequence);
   console.log('[advance] curIdx in sequence:', sequence.indexOf(placedId));
 
-  if (!sequence.length) { mobileFeaturedName = placedId; return; }
+  if (!sequence.length) { setFeatured(placedId); return; }
 
   // Find where placedId sits in the sequence and advance to the next entry
   const curIdx = sequence.indexOf(placedId);
   if (curIdx !== -1 && curIdx < sequence.length - 1) {
-    // Currently in the sequence — step forward
-    mobileFeaturedName = sequence[curIdx + 1];
+    setFeatured(sequence[curIdx + 1]);
   } else {
-    // Not in sequence (e.g. was a neutral not yet in sequence) or at end — start from beginning
-    mobileFeaturedName = sequence[0];
+    setFeatured(sequence[0]);
   }
 }
 
@@ -248,6 +247,16 @@ function resolveMobileFeatured() {
 function slotIsLocked(i) {
   if (guessHistory.length === 0) return false;
   return guessHistory[guessHistory.length - 1].feedback[i] === "correct";
+}
+
+// Set featured card and auto-arm it if actionable (not locked, not eliminated)
+function setFeatured(id) {
+  mobileFeaturedName = id;
+  const card = cards.find(c => c.id === id);
+  if (!card || confirmedDecoyIdsGlobal.has(id)) return;
+  const placedEntry = Object.entries(assignments).find(([, a]) => a.id === id);
+  const isLocked = placedEntry && slotIsLocked(parseInt(placedEntry[0]));
+  if (!isLocked) selectedCard = card;
 }
 
 // ── Interaction: tap a photo ──
@@ -385,7 +394,7 @@ async function checkAnswers() {
         const unusedZone = gridOrder.slice(N);
         const firstYellow = placedZone.find(id => !isSkippable(id) && fbById[id] === 'wrong_slot') || null;
         const firstNeutral = unusedZone.find(id => !isSkippable(id)) || null;
-        mobileFeaturedName = firstYellow || firstNeutral || gridOrder[0];
+        setFeatured(firstYellow || firstNeutral || gridOrder[0]);
       }
 
       render();
@@ -1066,15 +1075,8 @@ function render() {
       if (typeof window.openHowToPlay === 'function') window.openHowToPlay();
     });
 
-    // Pips sub-line — only during active game, not on completion screen
+    // Remove pips sub-line — guess count now lives in submit button
     document.getElementById('nav-sub-line')?.remove();
-    if (!revealed) {
-      const subLine = document.createElement('div');
-      subLine.id = 'nav-sub-line';
-      subLine.className = 'nav-sub-line';
-      subLine.innerHTML = `<span>Guess ${guessNum} of ${MAX_GUESSES}</span><div class="guesses-pip">${pipsHTML}</div>`;
-      navEl?.after(subLine);
-    }
 
     if (navEl) navEl.classList.add('nav-play-mode');
   } else if (screen === "home") {
@@ -1586,6 +1588,9 @@ function render() {
     }).join('');
 
     return `<div class="mt-tray panel" id="mt-tray">
+      <div class="mt-strip" id="mt-strip">
+        ${thumbsHTML}
+      </div>
       <div class="mt-featured-wrap" id="mt-featured-wrap">
         <div class="mt-featured tap-card" data-id="${fc.id}"
              style="border-color:${featBorder};${fcIsSelected ? 'box-shadow:0 0 20px rgba(125,211,252,0.35);' : ''}">
@@ -1597,9 +1602,6 @@ function render() {
         </div>
       </div>
       <div id="mt-submit-slot"></div>
-      <div class="mt-strip" id="mt-strip">
-        ${thumbsHTML}
-      </div>
     </div>`;
   })();
 
@@ -1666,7 +1668,7 @@ function render() {
   // Submit button — in-tray on mobile, fixed floater on desktop
   const slotsRemaining = currentRoute.stop_count - Object.keys(assignments).filter(i => assignments[i]).length;
   const submitLabel = filled
-    ? `Submit Guess ${guessNum} <span class="floating-submit-arrow">→</span>`
+    ? `Submit · Guess ${guessNum} of ${MAX_GUESSES} <span class="floating-submit-arrow">→</span>`
     : `Place ${slotsRemaining} more to submit`;
 
   if (isMobile() && !revealed) {
@@ -1807,12 +1809,8 @@ function render() {
       const id = el.dataset.mtThumb;
       const card = cards.find(c => c.id === id);
       if (!card) return;
-      mobileFeaturedName = id;
-      const isElim = confirmedDecoyIdsGlobal.has(id);
-      const placedEntry = Object.entries(assignments).find(([, a]) => a.id === id);
-      const isLocked = placedEntry && slotIsLocked(parseInt(placedEntry[0]));
-      if (!isElim && !isLocked) tapPhoto(card);
-      else { render(); }
+      setFeatured(id);
+      render();
     });
   });
 
@@ -1822,8 +1820,8 @@ function render() {
       e.stopPropagation();
       const id = btn.dataset.decoyFlag;
       userFlaggedDecoys.add(id);
-      // If it was selected, deselect it
       if (selectedCard?.id === id) { selectedCard = null; redrawGeoMap(); }
+      advanceMobileFeatured(id); // setFeatured is called inside advanceMobileFeatured
       render();
     });
   });
@@ -1865,9 +1863,7 @@ function render() {
           if (placedEntry && slotIsLocked(parseInt(placedEntry[0]))) continue;
           nextId = id; break;
         }
-        if (nextId) mobileFeaturedName = nextId;
-        // Swiping = browsing: deselect armed card
-        selectedCard = null;
+        if (nextId) setFeatured(nextId);
         render();
         redrawGeoMap();
       }
@@ -1933,14 +1929,6 @@ function openOverlay() {
   overlay.scrollTop = 0;
   overlay.style.animation = 'none';
   requestAnimationFrame(() => { overlay.style.animation = ''; });
-
-  // Request fullscreen on mobile to hide URL bar (must be inside a user gesture)
-  const el = document.documentElement;
-  if (el.requestFullscreen) {
-    el.requestFullscreen().catch(() => {});
-  } else if (el.webkitRequestFullscreen) {
-    el.webkitRequestFullscreen();
-  }
 }
 function closeOverlay() {
   const overlay = document.getElementById('game-overlay');

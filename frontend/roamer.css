@@ -47,16 +47,16 @@ body {
    ═══════════════════════════════════════════════════════ */
 
 #globe-canvas {
-  position: absolute;
+  position: fixed;
   top: 0; right: -8vw;
-  width: 72vw; height: 100%;
+  width: 72vw; height: 100vh;
   opacity: 0.38;
   pointer-events: none;
   z-index: 0;
 }
 
 .bg-lights {
-  position: absolute;
+  position: fixed;
   inset: 0;
   pointer-events: none;
   z-index: 0;
@@ -85,11 +85,10 @@ body {
 .entry-screen {
   position: relative;
   z-index: 1;
-  min-height: 100dvh;
+  min-height: 100vh;
   display: flex;
   flex-direction: column;
   padding: clamp(24px, 4vw, 48px) clamp(24px, 6vw, 80px);
-  overflow: hidden;
 }
 
 .brand-row {
@@ -1285,13 +1284,13 @@ body {
 
 /* Featured photo */
 .mt-featured-wrap {
-  padding: 10px 10px 6px;
+  padding: 0 10px 6px;
 }
 
 .mt-featured {
   position: relative;
   width: 100%;
-  aspect-ratio: 16 / 9;
+  aspect-ratio: 3 / 2;
   border-radius: 12px;
   overflow: hidden;
   border: 2px solid var(--border);
@@ -1511,7 +1510,7 @@ body {
   flex-direction: row;
   gap: 6px;
   overflow-x: auto;
-  padding: 0 10px 10px;
+  padding: 10px 10px 6px;
   -ms-overflow-style: none;
   scrollbar-width: none;
   scroll-behavior: smooth;
