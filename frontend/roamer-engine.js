@@ -136,9 +136,8 @@ function startGame(r, source) {
   cards            = shuffle([...r.photos]);
   gridOrder        = cards.map(c => c.id);
   assignments      = {};
+  selectedCard     = null;
   mobileFeaturedName = null;
-  // Auto-arm the first card so the "tap a pin" hint shows immediately
-  selectedCard     = cards[0] ?? null;
   userFlaggedDecoys  = new Set();
   revealed         = false;
   revealData       = null;
@@ -211,14 +210,16 @@ function advanceMobileFeatured(placedId) {
   console.log('[advance] sequence:', sequence);
   console.log('[advance] curIdx in sequence:', sequence.indexOf(placedId));
 
-  if (!sequence.length) { setFeatured(placedId); return; }
+  if (!sequence.length) { mobileFeaturedName = placedId; return; }
 
   // Find where placedId sits in the sequence and advance to the next entry
   const curIdx = sequence.indexOf(placedId);
   if (curIdx !== -1 && curIdx < sequence.length - 1) {
-    setFeatured(sequence[curIdx + 1]);
+    // Currently in the sequence — step forward
+    mobileFeaturedName = sequence[curIdx + 1];
   } else {
-    setFeatured(sequence[0]);
+    // Not in sequence (e.g. was a neutral not yet in sequence) or at end — start from beginning
+    mobileFeaturedName = sequence[0];
   }
 }
 
@@ -247,16 +248,6 @@ function resolveMobileFeatured() {
 function slotIsLocked(i) {
   if (guessHistory.length === 0) return false;
   return guessHistory[guessHistory.length - 1].feedback[i] === "correct";
-}
-
-// Set featured card and auto-arm it if actionable (not locked, not eliminated)
-function setFeatured(id) {
-  mobileFeaturedName = id;
-  const card = cards.find(c => c.id === id);
-  if (!card || confirmedDecoyIdsGlobal.has(id)) return;
-  const placedEntry = Object.entries(assignments).find(([, a]) => a.id === id);
-  const isLocked = placedEntry && slotIsLocked(parseInt(placedEntry[0]));
-  if (!isLocked) selectedCard = card;
 }
 
 // ── Interaction: tap a photo ──
@@ -394,7 +385,7 @@ async function checkAnswers() {
         const unusedZone = gridOrder.slice(N);
         const firstYellow = placedZone.find(id => !isSkippable(id) && fbById[id] === 'wrong_slot') || null;
         const firstNeutral = unusedZone.find(id => !isSkippable(id)) || null;
-        setFeatured(firstYellow || firstNeutral || gridOrder[0]);
+        mobileFeaturedName = firstYellow || firstNeutral || gridOrder[0];
       }
 
       render();
@@ -530,8 +521,11 @@ function getRouteViewport(route) {
   const lngs = getDisplayLngs(route);
   const routeSpanLat = Math.max(...lats) - Math.min(...lats) || 4;
   const routeSpanLng = Math.max(...lngs) - Math.min(...lngs) || 6;
-  const padLat = Math.max(2.5, routeSpanLat * 0.65);
-  const padLng = Math.max(2.5, routeSpanLng * 0.65);
+  // Tighter padding on mobile so pins stay large in the smaller canvas
+  const padFactor = isMobile() ? 0.35 : 0.65;
+  const minPad    = isMobile() ? 1.5  : 2.5;
+  const padLat = Math.max(minPad, routeSpanLat * padFactor);
+  const padLng = Math.max(minPad, routeSpanLng * padFactor);
   const centerLat = (Math.min(...lats) + Math.max(...lats)) / 2;
   const centerLng = (Math.min(...lngs) + Math.max(...lngs)) / 2;
   return {
@@ -560,7 +554,8 @@ function flatProject(lat, lng, vp, W, H) {
   const lngSpan = vp.maxLng - vp.minLng;
   const scaleByLat = H / latSpan;
   const scaleByLng = W / lngSpan;
-  const scale = Math.min(scaleByLat, scaleByLng) * 0.88;
+  const scaleFactor = isMobile() ? 0.95 : 0.88;
+  const scale = Math.min(scaleByLat, scaleByLng) * scaleFactor;
   const offX = W / 2 - vp.centerLng * scale;
   const offY = H / 2 + vp.centerLat * scale;
   return { x: lng * scale + offX, y: offY - lat * scale };
@@ -676,7 +671,7 @@ function drawGeoMap(t, rotDeg) {
     ctx.globalAlpha = d3Alpha;
     const landFeature = topojson.feature(activeTopoCache, activeTopoCache.objects.land);
     const vp2 = getRouteViewport(currentRoute);
-    const mapScale2 = Math.min(H / (vp2.maxLat - vp2.minLat), W / (vp2.maxLng - vp2.minLng)) * 0.88;
+    const mapScale2 = Math.min(H / (vp2.maxLat - vp2.minLat), W / (vp2.maxLng - vp2.minLng)) * (isMobile() ? 0.95 : 0.88);
     const offX2 = W / 2 - vp2.centerLng * mapScale2;
     const offY2 = H / 2 + vp2.centerLat * mapScale2;
     const shifts = [0];
@@ -1075,8 +1070,15 @@ function render() {
       if (typeof window.openHowToPlay === 'function') window.openHowToPlay();
     });
 
-    // Remove pips sub-line — guess count now lives in submit button
+    // Pips sub-line — only during active game, not on completion screen
     document.getElementById('nav-sub-line')?.remove();
+    if (!revealed) {
+      const subLine = document.createElement('div');
+      subLine.id = 'nav-sub-line';
+      subLine.className = 'nav-sub-line';
+      subLine.innerHTML = `<span>Guess ${guessNum} of ${MAX_GUESSES}</span><div class="guesses-pip">${pipsHTML}</div>`;
+      navEl?.after(subLine);
+    }
 
     if (navEl) navEl.classList.add('nav-play-mode');
   } else if (screen === "home") {
@@ -1588,9 +1590,6 @@ function render() {
     }).join('');
 
     return `<div class="mt-tray panel" id="mt-tray">
-      <div class="mt-strip" id="mt-strip">
-        ${thumbsHTML}
-      </div>
       <div class="mt-featured-wrap" id="mt-featured-wrap">
         <div class="mt-featured tap-card" data-id="${fc.id}"
              style="border-color:${featBorder};${fcIsSelected ? 'box-shadow:0 0 20px rgba(125,211,252,0.35);' : ''}">
@@ -1602,6 +1601,9 @@ function render() {
         </div>
       </div>
       <div id="mt-submit-slot"></div>
+      <div class="mt-strip" id="mt-strip">
+        ${thumbsHTML}
+      </div>
     </div>`;
   })();
 
@@ -1668,7 +1670,7 @@ function render() {
   // Submit button — in-tray on mobile, fixed floater on desktop
   const slotsRemaining = currentRoute.stop_count - Object.keys(assignments).filter(i => assignments[i]).length;
   const submitLabel = filled
-    ? `Submit · Guess ${guessNum} of ${MAX_GUESSES} <span class="floating-submit-arrow">→</span>`
+    ? `Submit Guess ${guessNum} <span class="floating-submit-arrow">→</span>`
     : `Place ${slotsRemaining} more to submit`;
 
   if (isMobile() && !revealed) {
@@ -1809,8 +1811,12 @@ function render() {
       const id = el.dataset.mtThumb;
       const card = cards.find(c => c.id === id);
       if (!card) return;
-      setFeatured(id);
-      render();
+      mobileFeaturedName = id;
+      const isElim = confirmedDecoyIdsGlobal.has(id);
+      const placedEntry = Object.entries(assignments).find(([, a]) => a.id === id);
+      const isLocked = placedEntry && slotIsLocked(parseInt(placedEntry[0]));
+      if (!isElim && !isLocked) tapPhoto(card);
+      else { render(); }
     });
   });
 
@@ -1820,8 +1826,8 @@ function render() {
       e.stopPropagation();
       const id = btn.dataset.decoyFlag;
       userFlaggedDecoys.add(id);
+      // If it was selected, deselect it
       if (selectedCard?.id === id) { selectedCard = null; redrawGeoMap(); }
-      advanceMobileFeatured(id); // setFeatured is called inside advanceMobileFeatured
       render();
     });
   });
@@ -1863,7 +1869,9 @@ function render() {
           if (placedEntry && slotIsLocked(parseInt(placedEntry[0]))) continue;
           nextId = id; break;
         }
-        if (nextId) setFeatured(nextId);
+        if (nextId) mobileFeaturedName = nextId;
+        // Swiping = browsing: deselect armed card
+        selectedCard = null;
         render();
         redrawGeoMap();
       }
@@ -1912,15 +1920,6 @@ function render() {
     // Trigger expand pulse hint after first render of the game (onboarding guards against repeat)
     if (typeof window.obHint_pulseExpand === 'function') {
       window.obHint_pulseExpand();
-    }
-
-    // Keep nav scrolled out of view on mobile to maximise screen real estate
-    if (isMobile()) {
-      requestAnimationFrame(() => {
-        const overlay = document.getElementById('game-overlay');
-        const nav = overlay?.querySelector('.nav');
-        if (overlay && nav) overlay.scrollTop = nav.offsetHeight + 10;
-      });
     }
   }
 }
