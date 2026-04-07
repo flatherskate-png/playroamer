@@ -1913,6 +1913,15 @@ function render() {
     if (typeof window.obHint_pulseExpand === 'function') {
       window.obHint_pulseExpand();
     }
+
+    // Keep nav scrolled out of view on mobile to maximise screen real estate
+    if (isMobile()) {
+      requestAnimationFrame(() => {
+        const overlay = document.getElementById('game-overlay');
+        const nav = overlay?.querySelector('.nav');
+        if (overlay && nav) overlay.scrollTop = nav.offsetHeight + 10;
+      });
+    }
   }
 }
 
