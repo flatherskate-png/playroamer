@@ -1209,8 +1209,108 @@ body {
 }
 
 /* ═══════════════════════════════════════════════════════
-   GUESS HISTORY — compact horizontal strips
+   MOBILE LANDSCAPE LAYOUT
+   Map + featured photo side-by-side top half,
+   thumbnail strip pinned to bottom
    ═══════════════════════════════════════════════════════ */
+
+.play-mobile-landscape {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 56px); /* subtract nav height */
+  gap: 0;
+  overflow: hidden;
+}
+
+.pml-top {
+  display: flex;
+  flex-direction: row;
+  flex: 1 1 0;
+  min-height: 0;
+  gap: 8px;
+  padding: 0 8px 4px;
+}
+
+.pml-map {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.pml-map-panel {
+  flex: 1 1 0;
+  margin-bottom: 0 !important;
+  height: 100% !important;
+}
+
+.pml-map-panel #route-canvas-slot {
+  height: 100%;
+  padding: 0 !important;
+}
+
+.pml-map-panel #route-canvas {
+  width: 100% !important;
+  height: 100% !important;
+  aspect-ratio: unset !important;
+  border-radius: 10px;
+  display: block;
+}
+
+.pml-featured {
+  flex: 0 0 38%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.pml-feat-img {
+  width: 100%;
+  height: 100%;
+  max-height: 100%;
+  aspect-ratio: unset !important;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 2px solid var(--border);
+  transition: border-color 0.15s, box-shadow 0.15s;
+  cursor: pointer;
+  position: relative;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+}
+
+.pml-feat-img img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.pml-strip-row {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  padding: 2px 6px 6px;
+  border-top: 1px solid rgba(255,255,255,0.05);
+}
+
+.pml-strip {
+  padding: 6px 4px 4px !important;
+}
+
+/* Tighter thumbs in landscape */
+@media (max-height: 480px) {
+  .pml-strip .mt-thumb {
+    width: 46px;
+    height: 46px;
+  }
+}
+
+
 
 .guess-history-panel {
   margin-bottom: 8px;
@@ -1472,6 +1572,17 @@ body {
   backdrop-filter: blur(4px);
 }
 
+/* "Place N more" hint label — shown in tray when submit not yet available */
+.mt-place-label {
+  text-align: center;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.78rem;
+  font-weight: 400;
+  color: var(--text-3);
+  padding: 8px 10px 10px;
+  letter-spacing: 0.02em;
+}
+
 /* Thumbnail strip */
 /* Mobile in-tray submit button */
 #mt-submit-slot {
@@ -1635,6 +1746,12 @@ body {
 }
 
 /* Hide mobile tray on desktop */
+@media (max-width: 768px) {
+  .floating-submit {
+    bottom: 28vh;
+  }
+}
+
 @media (min-width: 769px) {
   .mt-tray {
     display: none !important;
@@ -1674,6 +1791,7 @@ body {
 }
 
 @media (max-height: 500px) {
+  /* Desktop landscape only — mobile landscape uses .play-mobile-landscape */
   .photo-panel .tap-grid {
     grid-template-columns: repeat(2, 1fr) !important;
   }

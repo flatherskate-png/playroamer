@@ -586,12 +586,11 @@ function computePinLayout(route, W, H) {
     };
   });
 
-  // Pin radius scales with canvas diagonal at 35% of the guaranteed 7% stop separation.
-  // Routes are curated to keep adjacent stops ≥7% of route diagonal apart,
-  // so this size never causes overlap.
+  // Pin radius scales with canvas diagonal. Minimum is larger on mobile for tap targets.
   const diag = Math.hypot(W, H);
-  const pinR = Math.round(Math.max(10, Math.min(30, diag * 0.07 * 0.35)));
-  const emptyR = Math.max(7, Math.round(pinR * 0.55));
+  const pinMin = isMobile() ? 18 : 10;
+  const pinR = Math.round(Math.max(pinMin, Math.min(30, diag * 0.07 * 0.42)));
+  const emptyR = Math.max(isMobile() ? 13 : 7, Math.round(pinR * 0.55));
 
   return { pts, pinR, emptyR };
 }
@@ -1598,7 +1597,7 @@ function render() {
           ${expandBtn}
         </div>
       </div>
-      <div id="mt-submit-slot"></div>
+      <div id="mt-submit-slot">${!filled ? `<div class="mt-place-label">Place ${currentRoute.stop_count - Object.keys(assignments).filter(i => assignments[i]).length} more to submit</div>` : ''}</div>
     </div>`;
   })();
 
@@ -1606,6 +1605,131 @@ function render() {
   if (revealed) {
     document.getElementById('game-overlay').classList.add('revealed');
     app.innerHTML = completionHTML;
+  } else if (isLandscape && isMobile()) {
+    // ── Mobile landscape: map + featured photo side-by-side, thumbnails below ──
+    const mfc = resolveMobileFeatured();
+    const mfcIsElim    = mfc ? confirmedDecoyIds.has(mfc.id) : false;
+    const mfcIsUserDecoy = mfc ? userFlaggedDecoys.has(mfc.id) : false;
+    const mfcPlacedEntry = mfc ? Object.entries(assignments).find(([, a]) => a.id === mfc.id) : null;
+    const mfcSlotIdx   = mfcPlacedEntry ? parseInt(mfcPlacedEntry[0]) : -1;
+    const mfcIsPlaced  = mfcSlotIdx !== -1;
+    const mfcLocked    = mfcIsPlaced && slotIsLocked(mfcSlotIdx);
+    const mfcIsSelected = selectedCard?.id === mfc?.id;
+
+    let mfcBorder, mfcOverlayHTML = '', mfcHint = '';
+    if (mfc) {
+      if (mfcLocked) {
+        mfcBorder = '#4ade80';
+        mfcOverlayHTML = `<div class="mt-feat-overlay mt-feat-locked"><div class="mt-feat-badge mt-badge-locked">✓ Locked at stop ${mfcSlotIdx + 1}</div></div>`;
+      } else if (mfcIsElim) {
+        mfcBorder = '#f87171';
+        mfcOverlayHTML = `<div class="mt-feat-overlay mt-feat-elim"><div class="mt-feat-badge mt-badge-elim">✗ Decoy eliminated</div></div>`;
+      } else if (mfcIsUserDecoy) {
+        mfcBorder = '#fb923c';
+        mfcOverlayHTML = `<div class="mt-feat-overlay mt-feat-userdecoy"></div>`;
+      } else if (mfcIsPlaced) {
+        mfcBorder = 'rgba(125,211,252,0.5)';
+        mfcOverlayHTML = `<div class="mt-feat-overlay mt-feat-placed"><div class="mt-feat-badge mt-badge-placed">placed at stop ${mfcSlotIdx + 1}</div></div>`;
+      } else if (mfcIsSelected) {
+        mfcBorder = 'var(--cyan)';
+        mfcHint = `<div class="mt-feat-hint">tap a pin on the map →</div>`;
+        mfcOverlayHTML = `<div class="mt-feat-overlay mt-feat-selected"></div>`;
+      } else {
+        mfcBorder = 'var(--border)';
+      }
+    }
+
+    let mfcDecoyBtn = '';
+    if (mfc && !mfcLocked && !mfcIsElim) {
+      mfcDecoyBtn = mfcIsUserDecoy
+        ? `<button class="mt-decoy-btn mt-decoy-btn-flagged" data-unflag="${mfc.id}">✕ Not a decoy</button>`
+        : `<button class="mt-decoy-btn${mfcIsSelected ? ' mt-decoy-btn-active' : ''}" data-decoy-flag="${mfc.id}">Mark as Decoy</button>`;
+    }
+
+    const mfcFeatIdx = mfc ? cards.indexOf(mfc) : -1;
+    const mfcExpandBtn = mfc ? `<button class="mt-expand-btn" onclick="event.stopPropagation();openLightbox(${mfcFeatIdx})" aria-label="Expand"><svg width="11" height="11" viewBox="0 0 11 11" fill="none"><path d="M1 4V1h3M7 1h3v3M10 7v3H7M4 10H1V7" stroke="rgba(240,239,245,0.7)" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg></button>` : '';
+
+    // Thumbnail strip
+    const lastGuessForML = guessHistory.length > 0 ? guessHistory[guessHistory.length - 1] : null;
+    const lastFbOfML = {}, lastSlotOfML = {};
+    if (lastGuessForML) {
+      Object.entries(lastGuessForML.assignments).forEach(([si, card]) => {
+        if (card) { lastFbOfML[card.id] = lastGuessForML.feedback[parseInt(si)]; lastSlotOfML[card.id] = parseInt(si) + 1; }
+      });
+    }
+    const lastPlacedIdsML = lastGuessForML
+      ? new Set(Object.values(lastGuessForML.assignments).filter(Boolean).map(c => c.id))
+      : new Set();
+
+    const mlThumbsHTML = gridOrder.map(id => {
+      const c = cards.find(card => card.id === id);
+      if (!c) return '';
+      const i = cards.indexOf(c);
+      const tIsElim = confirmedDecoyIds.has(c.id);
+      const tIsUserDecoy = userFlaggedDecoys.has(c.id);
+      const tPlaced = Object.entries(assignments).find(([, a]) => a.id === c.id);
+      const tSlotIdx = tPlaced ? parseInt(tPlaced[0]) : -1;
+      const tIsPlaced = tSlotIdx !== -1;
+      const tLocked = tIsPlaced && slotIsLocked(tSlotIdx);
+      const tIsSelected = selectedCard?.id === c.id;
+      const tIsFeatured = c.id === mfc?.id;
+      let cls = 'mt-thumb';
+      if (tIsFeatured) cls += ' mt-active';
+      if (tIsSelected) cls += ' mt-selected';
+      if (tLocked) cls += ' mt-locked';
+      else if (tIsPlaced) cls += ' mt-picked';
+      if (tIsElim) cls += ' mt-elim';
+      else if (tIsUserDecoy) cls += ' mt-user-decoy';
+      const histFb = lastPlacedIdsML.has(c.id) ? lastFbOfML[c.id] : null;
+      const histStop = lastSlotOfML[c.id] || '';
+      if (!tLocked && !tIsElim) {
+        if (histFb === 'wrong_slot') cls += ' mt-hist-yellow';
+        else if (histFb === 'decoy') cls += ' mt-hist-red';
+      }
+      let dotBadge = '';
+      if (histFb === 'correct') dotBadge = `<div class="mt-dot-badge mt-dot-locked">✓${histStop}</div>`;
+      else if (histFb === 'wrong_slot') dotBadge = `<div class="mt-dot-badge mt-dot-wrongslot">${histStop}</div>`;
+      else if (histFb === 'decoy') dotBadge = `<div class="mt-dot-badge mt-dot-elim">✗</div>`;
+      else if (tLocked) dotBadge = `<div class="mt-dot-badge mt-dot-locked">✓</div>`;
+      else if (tIsPlaced) dotBadge = `<div class="mt-dot-badge mt-dot-placed">↑</div>`;
+      else if (tIsElim) dotBadge = `<div class="mt-dot-badge mt-dot-elim">✗</div>`;
+      return `<div class="${cls}" data-mt-thumb="${c.id}" data-mt-idx="${i}"><img src="${c.photo}" alt="" draggable="false"/>${dotBadge}</div>`;
+    }).join('');
+
+    app.innerHTML = `
+      <div class="play-mobile-landscape">
+        <div class="pml-top">
+          <div class="pml-map">
+            <div class="map-panel pml-map-panel" id="map-panel">
+              ${mapContentHTML}
+            </div>
+          </div>
+          <div class="pml-featured">
+            ${mfc ? `<div class="mt-featured tap-card pml-feat-img" data-id="${mfc.id}"
+                style="border-color:${mfcBorder};${mfcIsSelected ? 'box-shadow:0 0 20px rgba(125,211,252,0.35);' : ''}">
+              <img src="${mfc.photo}" alt="" draggable="false"/>
+              ${mfcOverlayHTML}
+              ${mfcHint}
+              ${mfcDecoyBtn}
+              ${mfcExpandBtn}
+            </div>` : ''}
+          </div>
+        </div>
+        <div class="pml-strip-row" id="pml-strip-row">
+          <div class="mt-strip pml-strip" id="mt-strip">
+            ${mlThumbsHTML}
+          </div>
+          <div id="mt-submit-slot"></div>
+        </div>
+      </div>`;
+
+    // Hint slot
+    const staleHint = document.getElementById('ob-hint-slot');
+    if (staleHint) staleHint.remove();
+    const hintSlot = document.createElement('div');
+    hintSlot.id = 'ob-hint-slot';
+    hintSlot.className = 'ob-hint-slot-mobile-fixed';
+    document.getElementById('game-overlay').appendChild(hintSlot);
   } else if (isLandscape) {
     app.innerHTML = `
       <div class="play-landscape-row">
@@ -1669,17 +1793,31 @@ function render() {
     : `Place ${slotsRemaining} more to submit`;
 
   if (isMobile() && !revealed) {
-    // Inject into the tray slot (normal flow, no overlap)
+    // Hide the in-tray slot — floating submit handles it instead
     const mtSlot = document.getElementById('mt-submit-slot');
-    if (mtSlot) {
-      mtSlot.innerHTML = `<button class="mt-submit-btn${filled ? '' : ' mt-submit-btn-inactive'}" id="mt-submit-btn">${submitLabel}</button>`;
-      mtSlot.querySelector('#mt-submit-btn')?.addEventListener('click', async () => {
+    if (mtSlot) mtSlot.innerHTML = '';
+
+    // Use the floating submit, only visible when all pins placed
+    let floatWrap = document.getElementById('floating-submit');
+    if (!floatWrap) {
+      floatWrap = document.createElement('div');
+      floatWrap.id = 'floating-submit';
+      floatWrap.className = 'floating-submit';
+      floatWrap.innerHTML = `<button class="floating-submit-btn" id="floating-submit-btn"></button>`;
+      document.getElementById('game-overlay').appendChild(floatWrap);
+      document.getElementById('floating-submit-btn').addEventListener('click', async () => {
         if (allSlotsFilled()) await checkAnswers();
       });
     }
-    // Hide the floating version on mobile
-    const floatWrap = document.getElementById('floating-submit');
-    if (floatWrap) floatWrap.classList.remove('visible');
+    const fbtn = document.getElementById('floating-submit-btn');
+    if (fbtn) {
+      fbtn.innerHTML = submitLabel;
+      fbtn.classList.toggle('floating-submit-btn-inactive', !filled);
+      fbtn.disabled = !filled;
+    }
+    // Slide up only when all slots filled
+    if (filled) floatWrap.classList.add('visible');
+    else floatWrap.classList.remove('visible');
   } else {
     // Desktop/landscape: use the fixed floater
     let floatWrap = document.getElementById('floating-submit');
@@ -1862,6 +2000,43 @@ function render() {
         if (nextId) setFeatured(nextId);
         render();
         redrawGeoMap();
+      }
+    }, { passive: true });
+  })();
+
+  // Mobile landscape: wire featured photo tap and swipe
+  (function() {
+    const pmlFeat = document.querySelector('.pml-feat-img');
+    if (!pmlFeat) return;
+    const id = pmlFeat.dataset.id;
+    const card = cards.find(c => c.id === id);
+    if (!card) return;
+    pmlFeat.addEventListener('click', e => {
+      if (e.target.closest('.expand-btn') || e.target.closest('.mt-expand-btn')) return;
+      if (e.target.closest('.mt-decoy-btn')) return;
+      tapPhoto(card);
+    });
+    let sx = 0, sy = 0;
+    pmlFeat.addEventListener('touchstart', e => { sx = e.touches[0].clientX; sy = e.touches[0].clientY; }, { passive: true });
+    pmlFeat.addEventListener('touchend', e => {
+      const dx = e.changedTouches[0].clientX - sx;
+      const dy = e.changedTouches[0].clientY - sy;
+      if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 36) {
+        const dir = dx < 0 ? 1 : -1;
+        const mfc = resolveMobileFeatured();
+        const curIdx = gridOrder.indexOf(mfc?.id);
+        const n = gridOrder.length;
+        let nextId = null;
+        for (let i = 1; i <= n; i++) {
+          const nid = gridOrder[(curIdx + dir * i + n) % n];
+          const c = cards.find(card => card.id === nid);
+          if (!c || confirmedDecoyIdsGlobal.has(c.id)) continue;
+          const pe = Object.entries(assignments).find(([, a]) => a.id === c.id);
+          if (pe && slotIsLocked(parseInt(pe[0]))) continue;
+          nextId = nid; break;
+        }
+        if (nextId) setFeatured(nextId);
+        render(); redrawGeoMap();
       }
     }, { passive: true });
   })();
