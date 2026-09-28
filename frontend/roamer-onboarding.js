@@ -1145,7 +1145,8 @@ window.obHint_photoSelected = function() {
 window.obHint_photoPlaced = function() {
   if (obGet(OB_KEYS.hint2)) return;
   obSet(OB_KEYS.hint2);
-  _queueHint('Tap a placed photo or pin to remove it', '↩', 5500);
+  const phonePortrait = typeof isMobile === 'function' && isMobile() && !(typeof isLandscape !== 'undefined' && isLandscape);
+  _queueHint(phonePortrait ? 'Changed your mind? Tap a different stop to move it' : 'Tap a placed photo or pin to remove it', '↩', 5500);
 };
 
 // Hint 3: pulse animation on first photo's expand icon (game-load, first game only)

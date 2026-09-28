@@ -128,6 +128,7 @@ function formatTime(ms) {
 }
 
 function startGame(r, source) {
+  if (typeof hideUndoToast === 'function') hideUndoToast();
   if (!r) return;
   currentRoute     = r;
   playSource       = source || "home";
@@ -306,11 +307,78 @@ function tapPin(slotIndex) {
   if (typeof window.obHint_photoPlaced === 'function') window.obHint_photoPlaced();
 }
 
+// ── Interaction (phone portrait): tap a stop in the stop row ──
+// Puts the photo currently on screen into that stop. If the photo was already at
+// another stop it moves; if the stop held a different photo, that photo is bumped
+// back to unplaced and an Undo toast appears. Tapping the stop that already holds
+// the on-screen photo takes it back out.
+function placeFeaturedAt(slotIndex) {
+  if (revealed || slotIsLocked(slotIndex)) return;
+  const fc = resolveMobileFeatured();
+  if (!fc || confirmedDecoyIdsGlobal.has(fc.id)) return;
+  const prevEntry = Object.entries(assignments).find(([, a]) => a.id === fc.id);
+  if (prevEntry && slotIsLocked(parseInt(prevEntry[0]))) return;
+
+  if (assignments[slotIndex]?.id === fc.id) {
+    delete assignments[slotIndex];
+    selectedCard = fc;
+    render();
+    redrawGeoMap();
+    return;
+  }
+
+  const snapshot = { ...assignments };
+  const displaced = assignments[slotIndex] || null;
+  if (prevEntry) delete assignments[prevEntry[0]];
+  assignments[slotIndex] = fc;
+  selectedCard = null;
+  advanceMobileFeatured(fc.id);
+  render();
+  redrawGeoMap();
+
+  if (displaced) {
+    showUndoToast(`Replaced the photo at stop ${slotIndex + 1}`, () => {
+      Object.keys(assignments).forEach(k => delete assignments[k]);
+      Object.assign(assignments, snapshot);
+      setFeatured(fc.id);
+      render();
+      redrawGeoMap();
+    });
+  }
+  if (typeof window.obHint_photoPlaced === 'function') window.obHint_photoPlaced();
+}
+
+let _undoTimer = null;
+function showUndoToast(message, onUndo) {
+  const overlay = document.getElementById('game-overlay');
+  if (!overlay) return;
+  let toast = document.getElementById('undo-toast');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = 'undo-toast';
+    toast.className = 'undo-toast';
+    overlay.appendChild(toast);
+  }
+  toast.innerHTML = `<span>${message}</span><button type="button">Undo</button>`;
+  toast.querySelector('button').addEventListener('click', () => {
+    hideUndoToast();
+    onUndo();
+  });
+  toast.classList.add('visible');
+  clearTimeout(_undoTimer);
+  _undoTimer = setTimeout(hideUndoToast, 4000);
+}
+function hideUndoToast() {
+  clearTimeout(_undoTimer);
+  document.getElementById('undo-toast')?.classList.remove('visible');
+}
+
 function allSlotsFilled() {
   return Array.from({length: currentRoute.stop_count}, (_, i) => i).every(i => assignments[i]);
 }
 
 async function checkAnswers() {
+  if (typeof hideUndoToast === 'function') hideUndoToast();
   const guessNumber = guessHistory.length + 1;
   const assignmentsList = Object.entries(assignments).map(([slot, card]) => ({
     slot_index: parseInt(slot),
@@ -1490,7 +1558,6 @@ function render() {
       </div>`;
     } else if (fcIsSelected) {
       featBorder = 'var(--cyan)';
-      featHint = `<div class="mt-feat-hint">tap a pin on the map →</div>`;
       featOverlayHTML = `<div class="mt-feat-overlay mt-feat-selected"></div>`;
     } else {
       featBorder = 'var(--border)';
@@ -1583,20 +1650,65 @@ function render() {
       </div>`;
     }).join('');
 
+    // ── Stop row: one big slot per stop. Tapping a slot places the photo on screen there. ──
+    const stopsHTML = Array.from({ length: currentRoute.stop_count }, (_, i) => {
+      const sc = assignments[i];
+      const locked = slotIsLocked(i);
+      const lastCardHere = lastGuessForThumb?.assignments[i];
+      const hist = (sc && lastCardHere && lastCardHere.id === sc.id) ? lastGuessForThumb.feedback[i] : null;
+      let cls = 'mt-stop';
+      if (sc) cls += ' mt-stop-filled';
+      if (locked) cls += ' mt-stop-locked';
+      else if (hist === 'wrong_slot') cls += ' mt-stop-yellow';
+      else if (hist === 'decoy') cls += ' mt-stop-red';
+      if (sc && sc.id === fc.id) cls += ' mt-stop-current';
+      const label = i === 0 ? 'Start' : (i === currentRoute.stop_count - 1 ? 'End' : '');
+      return `<div class="mt-stop-col">
+        <button class="${cls}" data-stop="${i}" ${locked ? 'disabled' : ''} aria-label="Stop ${i + 1}">
+          ${sc ? `<img src="${sc.photo}" alt="" draggable="false"/>` : ''}
+          <span class="mt-stop-num">${locked ? '✓' : i + 1}</span>
+        </button>
+        <span class="mt-stop-label">${label}</span>
+      </div>`;
+    }).join('');
+
+    const fcActionable = !fcLocked && !fcIsElim;
+    const stopsPrompt = !fcActionable ? 'Swipe the photo to see the next one'
+      : fcIsPlaced ? `This is at stop ${fcSlotIdx + 1} · tap another stop to move it`
+      : 'Which stop is this photo?';
+
+    // Position dots under the photo — same order as the swipe, never reshuffled
+    const dotsHTML = gridOrder.map(id => {
+      const c = cards.find(card => card.id === id);
+      if (!c) return '';
+      const pe = Object.entries(assignments).find(([, a]) => a.id === c.id);
+      let cls = 'mt-pos-dot';
+      if (c.id === fc.id) cls += ' mt-pos-current';
+      if (confirmedDecoyIds.has(c.id)) cls += ' mt-pos-elim';
+      else if (pe && slotIsLocked(parseInt(pe[0]))) cls += ' mt-pos-locked';
+      else if (pe) cls += ' mt-pos-placed';
+      else if (lastFbOfThumb[c.id] === 'wrong_slot') cls += ' mt-pos-yellow';
+      return `<span class="${cls}"></span>`;
+    }).join('');
+
     return `<div class="mt-tray panel" id="mt-tray">
-      <div class="mt-strip" id="mt-strip">
-        ${thumbsHTML}
+      <div class="mt-stops-prompt">${stopsPrompt}</div>
+      <div class="mt-stops" id="mt-stops">
+        ${stopsHTML}
       </div>
       <div class="mt-featured-wrap" id="mt-featured-wrap">
         <div class="mt-featured tap-card" data-id="${fc.id}"
              style="border-color:${featBorder};${fcIsSelected ? 'box-shadow:0 0 20px rgba(125,211,252,0.35);' : ''}">
           <img src="${fc.photo}" alt="" draggable="false"/>
+          ${(!fcIsPlaced && lastFbOfThumb[fc.id] === 'wrong_slot')
+            ? `<div class="mt-feat-lastguess">On the route · not stop ${lastSlotOfThumb[fc.id]}</div>` : ''}
           ${featOverlayHTML}
           ${featHint}
           ${decoyBtnHTML}
           ${expandBtn}
         </div>
       </div>
+      <div class="mt-pos-dots">${dotsHTML}</div>
       <div id="mt-submit-slot">${!filled ? `<div class="mt-place-label">Place ${currentRoute.stop_count - Object.keys(assignments).filter(i => assignments[i]).length} more to submit</div>` : ''}</div>
     </div>`;
   })();
@@ -1933,8 +2045,19 @@ function render() {
       if (e.target.closest('.expand-btn')) return;
       if (e.target.closest('.mt-decoy-btn')) return;
       if (e.target.closest('.mt-unflag-btn')) return;
+      // Phone (portrait): the big photo is for looking — tapping it opens it full screen.
+      // Placing happens only via the stop row, so a stray tap here can't un-place anything.
+      if (el.closest('#mt-tray')) {
+        if (!e.target.closest('.mt-expand-btn')) openLightbox(cards.indexOf(card));
+        return;
+      }
       tapPhoto(card);
     });
+  });
+
+  // ── Stop row taps (phone portrait) ──
+  document.querySelectorAll('.mt-stop').forEach(btn => {
+    btn.addEventListener('click', () => placeFeaturedAt(parseInt(btn.dataset.stop)));
   });
 
   // ── Mobile tray events ──
@@ -2220,6 +2343,8 @@ function handleCanvasTap(e) {
   if (e.type === 'touchend') e.preventDefault(); // suppress ghost click after touch
   const canvas = document.getElementById('route-canvas');
   if (!canvas || !currentRoute || revealed) return;
+  // Phone portrait: the map is look-only; photos are placed with the stop row.
+  if (isMobile() && !isLandscape) return;
   const rect = canvas.getBoundingClientRect();
   const clientX = e.clientX !== undefined ? e.clientX : (e.changedTouches && e.changedTouches[0].clientX);
   const clientY = e.clientY !== undefined ? e.clientY : (e.changedTouches && e.changedTouches[0].clientY);
