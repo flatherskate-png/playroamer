@@ -8,7 +8,7 @@
 function openLightbox(cardIndex) {
   lightboxIndex = cardIndex;
   renderLightbox();
-  document.getElementById('lightbox').classList.add('open');
+  document.getElementById('lightbox').classList.add('open', 'lb-single');
   document.body.style.overflow = 'hidden';
 }
 
@@ -18,10 +18,9 @@ function closeLightbox() {
   lightboxIndex = null;
 }
 
+// Full screen shows one photo only — browsing between photos happens on the main screen.
 function lbStep(delta) {
-  if (lightboxIndex === null || !cards.length) return;
-  lightboxIndex = (lightboxIndex + delta + cards.length) % cards.length;
-  renderLightbox();
+  // Intentionally does nothing (kept so existing callers don't break).
 }
 
 function renderLightbox() {
@@ -154,6 +153,8 @@ document.addEventListener('keydown', e => {
 
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('lb-close').addEventListener('click', closeLightbox);
+  // Tapping the photo itself closes full screen
+  document.getElementById('lb-img')?.addEventListener('click', closeLightbox);
   document.getElementById('lb-prev').addEventListener('click', () => lbStep(-1));
   document.getElementById('lb-next').addEventListener('click', () => lbStep(1));
 

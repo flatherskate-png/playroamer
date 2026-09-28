@@ -858,6 +858,29 @@ function drawGeoMap(t, rotDeg) {
       const isStart = i === 0;
       const isEnd = i === N - 1;
       const p = pts[i];
+
+      // Phone portrait: pins are color-coded, not photos (photos are too small to read
+      // at this size, and the stop row under the map already shows them).
+      if (isMobile() && !isLandscape) {
+        const r = emptyR + 2;
+        ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+        ctx.fillStyle = locked ? `rgba(74,222,128,${routeAlpha})` : `rgba(125,211,252,${routeAlpha})`;
+        ctx.fill();
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = `rgba(6,10,18,${0.9 * routeAlpha})`;
+        ctx.stroke();
+        ctx.fillStyle = `rgba(6,16,28,${routeAlpha})`;
+        ctx.font = `bold ${Math.round(r * 0.95)}px 'DM Sans', sans-serif`;
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(locked ? '✓' : String(i + 1), p.x, p.y + 1);
+        if (isStart || isEnd) {
+          ctx.fillStyle = isStart ? `rgba(125,211,252,${0.7*routeAlpha})` : `rgba(255,255,255,${0.3*routeAlpha})`;
+          ctx.font = `bold 9px 'DM Sans', sans-serif`;
+          ctx.fillText(isStart ? 'START' : 'END', p.x, p.y - r - 8);
+        }
+        continue;
+      }
+
       const r = pinR;
 
       // Outer ring

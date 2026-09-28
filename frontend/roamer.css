@@ -2104,3 +2104,8 @@ body {
   pointer-events: none;
 }
 .mt-pos-dot.mt-pos-current.mt-pos-yellow { background: var(--cyan); }
+
+/* Full screen shows a single photo: hide the browse controls */
+#lightbox.lb-single .lb-arrow,
+#lightbox.lb-single .lb-dots,
+#lightbox.lb-single .lb-counter { display: none !important; }
